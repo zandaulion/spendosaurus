@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/app.css?v=14">
+  <link rel="stylesheet" href="/app.css?v=15">
 </head>
 <body>
 
@@ -39,53 +39,58 @@
 
   <!-- Authenticated Main Application -->
   <div id="app-main" hidden>
-    <!-- Sticky Top Header -->
-    <header class="app-header">
-      <div class="brand-group">
-        <div id="header-mascot-container"></div>
-        <div>
-          <h1 class="app-title">Spendosaurus</h1>
-          <div class="app-subtitle" id="device-tag">Family Ledger</div>
+    <!-- Fixed Top Region (Header + Summary Overview) -->
+    <div class="top-fixed-region">
+      <header class="app-header">
+        <div class="brand-group">
+          <div id="header-mascot-container"></div>
+          <div>
+            <h1 class="app-title">Spendosaurus</h1>
+            <div class="app-subtitle" id="device-tag">Family Ledger</div>
+          </div>
         </div>
+        <div class="header-actions">
+          <button id="btn-open-history" class="pill-btn" aria-label="Activity History">
+            <span>📜</span> History
+          </button>
+          <button id="btn-open-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+        </div>
+      </header>
+
+      <!-- Summary Dashboard Card -->
+      <div class="overview-fixed-wrapper">
+        <section class="stats-card">
+          <div class="stats-header">
+            <div class="stats-title" id="overview-title">Overview (Active & Planned)</div>
+            <div class="currency-toggle" id="currency-toggle">
+              <button data-currency="RON" class="active">RON</button>
+              <button data-currency="EUR">EUR</button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Total Estimated</div>
+              <div class="stat-value" id="stat-estimated">0 RON</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Incurred / Actual</div>
+              <div class="stat-value" id="stat-actual">0 RON</div>
+            </div>
+          </div>
+
+          <!-- Budget health banner with mascot reaction -->
+          <div id="budget-health-banner" style="display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 6px 12px; background: var(--sunken); border-radius: var(--radius-sm);">
+            <div id="budget-mascot-preview"></div>
+            <div style="font-size: 0.82rem; font-weight: 600; color: var(--ink-2);" id="budget-health-text">
+              All big spending is on track!
+            </div>
+          </div>
+        </section>
       </div>
-      <div class="header-actions">
-        <button id="btn-open-history" class="pill-btn" aria-label="Activity History">
-          <span>📜</span> History
-        </button>
-        <button id="btn-open-settings" class="icon-btn" aria-label="Settings">⚙️</button>
-      </div>
-    </header>
+    </div>
 
     <main class="container" id="scroll-container">
-      <!-- Summary Dashboard Card -->
-      <section class="stats-card">
-        <div class="stats-header">
-          <div class="stats-title" id="overview-title">Overview (Active & Planned)</div>
-          <div class="currency-toggle" id="currency-toggle">
-            <button data-currency="RON" class="active">RON</button>
-            <button data-currency="EUR">EUR</button>
-          </div>
-        </div>
-
-        <div class="stats-grid">
-          <div class="stat-box">
-            <div class="stat-label">Total Estimated</div>
-            <div class="stat-value" id="stat-estimated">0 RON</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Incurred / Actual</div>
-            <div class="stat-value" id="stat-actual">0 RON</div>
-          </div>
-        </div>
-
-        <!-- Budget health banner with mascot reaction -->
-        <div id="budget-health-banner" style="display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 12px; background: var(--sunken); border-radius: var(--radius-sm);">
-          <div id="budget-mascot-preview"></div>
-          <div style="font-size: 0.82rem; font-weight: 600; color: var(--ink-2);" id="budget-health-text">
-            All big spending is on track!
-          </div>
-        </div>
-      </section>
 
       <!-- Filter Chips Bar -->
       <nav class="filter-bar" id="filter-bar">
@@ -378,6 +383,6 @@
   </div>
 
   <!-- Application JS Modules -->
-  <script type="module" src="/app.js?v=14"></script>
+  <script type="module" src="/app.js?v=15"></script>
 </body>
 </html>
