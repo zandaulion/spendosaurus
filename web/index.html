@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Spendosaurus — Family Big-Ticket Spending</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#2E7D32" media="(prefers-color-scheme: light)">
@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/app.css?v=16">
+  <link rel="stylesheet" href="/app.css?v=17">
 </head>
 <body>
 
@@ -25,11 +25,11 @@
       <form id="gate-form">
         <div class="form-group" style="text-align: left;">
           <label class="form-label" for="invite-code-input">Invite Code</label>
-          <input type="text" id="invite-code-input" class="input-field" placeholder="XXXXX-XXXXX" autocomplete="off" autocorrect="off" autocapitalize="characters" required>
+          <input type="text" id="invite-code-input" class="input-field" placeholder="XXXXX-XXXXX" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" required>
         </div>
         <div class="form-group" style="text-align: left;">
           <label class="form-label" for="device-label-input">Your Name or Device</label>
-          <input type="text" id="device-label-input" class="input-field" placeholder="e.g. Alex's Phone" maxlength="32">
+          <input type="text" id="device-label-input" class="input-field" placeholder="e.g. Alex's Phone" maxlength="32" autocomplete="off" autocorrect="off" spellcheck="false">
         </div>
         <div id="gate-error" class="error" style="color: var(--danger); font-size: 0.88rem; margin-bottom: 12px;" hidden></div>
         <button type="submit" id="btn-activate" class="btn-primary">Activate Device</button>
@@ -137,13 +137,13 @@
       <form id="add-item-form">
         <div class="form-group">
           <label class="form-label" for="add-title">Title</label>
-          <input type="text" id="add-title" class="input-field" placeholder="e.g. Winter Utilities, New Sofa, Flight Tickets" required>
+          <input type="text" id="add-title" class="input-field" placeholder="e.g. Winter Utilities, New Sofa, Flight Tickets" autocomplete="off" autocorrect="off" spellcheck="false" required>
         </div>
 
         <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div>
             <label class="form-label" for="add-estimate">Estimated Budget</label>
-            <input type="number" id="add-estimate" class="input-field" placeholder="0.00" step="any" required>
+            <input type="number" id="add-estimate" class="input-field" placeholder="0.00" step="any" inputmode="decimal" autocomplete="off" required>
           </div>
           <div>
             <label class="form-label" for="add-currency">Currency</label>
@@ -179,12 +179,12 @@
 
         <div class="form-group">
           <label class="form-label" for="add-initial-cost">Initial Payment / Cost (Optional)</label>
-          <input type="number" id="add-initial-cost" class="input-field" placeholder="e.g. Deposit or first bill" step="any">
+          <input type="number" id="add-initial-cost" class="input-field" placeholder="e.g. Deposit or first bill" step="any" inputmode="decimal" autocomplete="off">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="add-notes">Notes</label>
-          <textarea id="add-notes" class="input-field" rows="2" placeholder="Model, store, warranty details, links..."></textarea>
+          <textarea id="add-notes" class="input-field" rows="2" placeholder="Model, store, warranty details, links..." autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
         </div>
 
         <button type="submit" class="btn-primary">Save Expense</button>
@@ -220,12 +220,12 @@
 
         <div class="form-group">
           <label class="form-label" for="tackon-amount">Cost Amount</label>
-          <input type="number" id="tackon-amount" class="input-field" placeholder="0.00" step="any" required style="font-size: 1.4rem; font-weight: 800;">
+          <input type="number" id="tackon-amount" class="input-field" placeholder="0.00" step="any" inputmode="decimal" autocomplete="off" required style="font-size: 1.4rem; font-weight: 800;">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="tackon-note">Sub-Item / Description</label>
-          <input type="text" id="tackon-note" class="input-field" placeholder="e.g. Gas bill, Flight deposit, Down payment">
+          <input type="text" id="tackon-note" class="input-field" placeholder="e.g. Gas bill, Flight deposit, Down payment" autocomplete="off" autocorrect="off" spellcheck="false">
         </div>
 
         <div class="form-group">
@@ -250,7 +250,7 @@
     </div>
   </div>
 
-  <!-- -------------------------------------------------------- Bottom Sheet: Edit Item -->
+  <!-- -------------------------------------------------------- Bottom Sheet: Edit Expense -->
   <div id="edit-sheet" class="sheet-overlay">
     <div class="sheet-panel">
       <div class="sheet-handle"></div>
@@ -263,13 +263,13 @@
         <input type="hidden" id="edit-item-id">
         <div class="form-group">
           <label class="form-label" for="edit-title">Title</label>
-          <input type="text" id="edit-title" class="input-field" required>
+          <input type="text" id="edit-title" class="input-field" autocomplete="off" autocorrect="off" spellcheck="false" required>
         </div>
 
         <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div>
             <label class="form-label" for="edit-estimate">Estimated Budget</label>
-            <input type="number" id="edit-estimate" class="input-field" step="any" required>
+            <input type="number" id="edit-estimate" class="input-field" step="any" inputmode="decimal" autocomplete="off" required>
           </div>
           <div>
             <label class="form-label" for="edit-currency">Currency</label>
@@ -306,7 +306,7 @@
 
         <div class="form-group">
           <label class="form-label" for="edit-notes">Notes</label>
-          <textarea id="edit-notes" class="input-field" rows="2"></textarea>
+          <textarea id="edit-notes" class="input-field" rows="2" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
         </div>
 
         <!-- Incremental Sub-Costs List on Item -->
@@ -348,7 +348,7 @@
       <form id="settings-form">
         <div class="form-group">
           <label class="form-label" for="set-device-name">My Device Name</label>
-          <input type="text" id="set-device-name" class="input-field" required maxlength="32">
+          <input type="text" id="set-device-name" class="input-field" autocomplete="off" autocorrect="off" spellcheck="false" required maxlength="32">
         </div>
 
         <div class="form-group">
@@ -362,11 +362,11 @@
         <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div>
             <label class="form-label" for="set-threshold-ron">Big Ticket Min (RON)</label>
-            <input type="number" id="set-threshold-ron" class="input-field" step="any">
+            <input type="number" id="set-threshold-ron" class="input-field" step="any" inputmode="decimal" autocomplete="off">
           </div>
           <div>
             <label class="form-label" for="set-threshold-eur">Big Ticket Min (EUR)</label>
-            <input type="number" id="set-threshold-eur" class="input-field" step="any">
+            <input type="number" id="set-threshold-eur" class="input-field" step="any" inputmode="decimal" autocomplete="off">
           </div>
         </div>
 
@@ -376,13 +376,13 @@
         </button>
 
         <div style="margin-top: 18px; text-align: center; font-size: 0.8rem; color: var(--ink-3); font-weight: 650; letter-spacing: 0.02em;" id="app-version-display">
-          🦖 Spendosaurus v1.1.0 (Build 2026.09.01)
+          🦖 Spendosaurus v1.3.1 (Build 2026.09.01)
         </div>
       </form>
     </div>
   </div>
 
   <!-- Application JS Modules -->
-  <script type="module" src="/app.js?v=16"></script>
+  <script type="module" src="/app.js?v=17"></script>
 </body>
 </html>
