@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Spendosaurus — Family Big-Ticket Spending</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#2E7D32" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#10120B" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/app.css?v=14">
+</head>
+<body>
+
+  <!-- Unauthenticated Invite Gate Screen -->
+  <div id="gate-screen" class="gate-screen" hidden>
+    <div class="gate-box">
+      <div id="gate-mascot-container" class="gate-mascot"></div>
+      <h1 class="gate-title">Spendosaurus</h1>
+      <p class="gate-desc">Family big-ticket spending & incremental cost tracker</p>
+      
+      <form id="gate-form">
+        <div class="form-group" style="text-align: left;">
+          <label class="form-label" for="invite-code-input">Invite Code</label>
+          <input type="text" id="invite-code-input" class="input-field" placeholder="XXXXX-XXXXX" autocomplete="off" autocorrect="off" autocapitalize="characters" required>
+        </div>
+        <div class="form-group" style="text-align: left;">
+          <label class="form-label" for="device-label-input">Your Name or Device</label>
+          <input type="text" id="device-label-input" class="input-field" placeholder="e.g. Alex's Phone" maxlength="32">
+        </div>
+        <div id="gate-error" class="error" style="color: var(--danger); font-size: 0.88rem; margin-bottom: 12px;" hidden></div>
+        <button type="submit" id="btn-activate" class="btn-primary">Activate Device</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Authenticated Main Application -->
+  <div id="app-main" hidden>
+    <!-- Sticky Top Header -->
+    <header class="app-header">
+      <div class="brand-group">
+        <div id="header-mascot-container"></div>
+        <div>
+          <h1 class="app-title">Spendosaurus</h1>
+          <div class="app-subtitle" id="device-tag">Family Ledger</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-open-history" class="pill-btn" aria-label="Activity History">
+          <span>📜</span> History
+        </button>
+        <button id="btn-open-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <main class="container" id="scroll-container">
+      <!-- Summary Dashboard Card -->
+      <section class="stats-card">
+        <div class="stats-header">
+          <div class="stats-title" id="overview-title">Overview (Active & Planned)</div>
+          <div class="currency-toggle" id="currency-toggle">
+            <button data-currency="RON" class="active">RON</button>
+            <button data-currency="EUR">EUR</button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">Total Estimated</div>
+            <div class="stat-value" id="stat-estimated">0 RON</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Incurred / Actual</div>
+            <div class="stat-value" id="stat-actual">0 RON</div>
+          </div>
+        </div>
+
+        <!-- Budget health banner with mascot reaction -->
+        <div id="budget-health-banner" style="display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 12px; background: var(--sunken); border-radius: var(--radius-sm);">
+          <div id="budget-mascot-preview"></div>
+          <div style="font-size: 0.82rem; font-weight: 600; color: var(--ink-2);" id="budget-health-text">
+            All big spending is on track!
+          </div>
+        </div>
+      </section>
+
+      <!-- Filter Chips Bar -->
+      <nav class="filter-bar" id="filter-bar">
+        <button class="filter-chip active" data-status="all">All</button>
+        <button class="filter-chip" data-status="active">⚡ In Progress</button>
+        <button class="filter-chip" data-status="planned">📋 Planned</button>
+        <button class="filter-chip" data-status="completed">✅ Completed</button>
+        <button class="filter-chip threshold-chip" id="threshold-filter-btn" data-threshold="true">🔥 Big Ticket Only</button>
+      </nav>
+
+      <!-- Items Feed List -->
+      <section class="items-feed" id="items-feed">
+        <!-- Rendered dynamically -->
+      </section>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" id="nav-feed">
+        <span style="font-size: 1.2rem;">🦖</span>
+        <span>Expenses</span>
+      </button>
+
+      <button class="nav-add-btn" id="btn-quick-add" aria-label="Add Big Ticket Expense">
+        <span style="font-size: 1.6rem; line-height: 1; font-weight: bold;">+</span>
+      </button>
+
+      <button class="nav-item" id="nav-history">
+        <span style="font-size: 1.2rem;">⏱️</span>
+        <span>Audit Log</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- -------------------------------------------------------- Bottom Sheet: Add Item -->
+  <div id="add-sheet" class="sheet-overlay">
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title">New Big-Ticket Item</h2>
+        <button class="close-btn" data-close="add-sheet">&times;</button>
+      </div>
+
+      <form id="add-item-form">
+        <div class="form-group">
+          <label class="form-label" for="add-title">Title</label>
+          <input type="text" id="add-title" class="input-field" placeholder="e.g. Winter Utilities, New Sofa, Flight Tickets" required>
+        </div>
+
+        <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div>
+            <label class="form-label" for="add-estimate">Estimated Budget</label>
+            <input type="number" id="add-estimate" class="input-field" placeholder="0.00" step="any" required>
+          </div>
+          <div>
+            <label class="form-label" for="add-currency">Currency</label>
+            <select id="add-currency" class="input-field">
+              <option value="RON">RON</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="add-category">Category</label>
+          <select id="add-category" class="input-field">
+            <option value="utilities">💡 Utilities & Heating</option>
+            <option value="home">🏡 Home & Renovation</option>
+            <option value="tech">💻 Tech & Gadgets</option>
+            <option value="auto">🚗 Vehicle & Transport</option>
+            <option value="vacation">✈️ Vacation & Travel</option>
+            <option value="education">🎓 Education & Kids</option>
+            <option value="health">🩺 Health & Wellness</option>
+            <option value="other">📦 Other Major Expense</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="add-status">Status</label>
+          <select id="add-status" class="input-field">
+            <option value="planned">📋 Planned / Wishlist</option>
+            <option value="active">⚡ In Progress / Accruing</option>
+            <option value="completed">✅ Purchased / Settled</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="add-initial-cost">Initial Payment / Cost (Optional)</label>
+          <input type="number" id="add-initial-cost" class="input-field" placeholder="e.g. Deposit or first bill" step="any">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="add-notes">Notes</label>
+          <textarea id="add-notes" class="input-field" rows="2" placeholder="Model, store, warranty details, links..."></textarea>
+        </div>
+
+        <button type="submit" class="btn-primary">Save Expense</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- -------------------------------------------------------- Bottom Sheet: Tack-on Cost -->
+  <div id="tackon-sheet" class="sheet-overlay">
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div>
+          <h2 class="sheet-title" id="tackon-item-title">Add Cost</h2>
+          <div style="font-size: 0.8rem; color: var(--ink-3);" id="tackon-item-subtitle">Estimate: 0 RON</div>
+        </div>
+        <button class="close-btn" data-close="tackon-sheet">&times;</button>
+      </div>
+
+      <form id="tackon-form">
+        <input type="hidden" id="tackon-item-id">
+        
+        <div class="form-group">
+          <label class="form-label">Quick Increment</label>
+          <div class="quick-chips-row" id="quick-increment-chips">
+            <button type="button" class="quick-chip-btn" data-add="50">+50</button>
+            <button type="button" class="quick-chip-btn" data-add="100">+100</button>
+            <button type="button" class="quick-chip-btn" data-add="200">+200</button>
+            <button type="button" class="quick-chip-btn" data-add="500">+500</button>
+            <button type="button" class="quick-chip-btn" data-add="1000">+1000</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tackon-amount">Cost Amount</label>
+          <input type="number" id="tackon-amount" class="input-field" placeholder="0.00" step="any" required style="font-size: 1.4rem; font-weight: 800;">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tackon-note">Sub-Item / Description</label>
+          <input type="text" id="tackon-note" class="input-field" placeholder="e.g. Gas bill, Flight deposit, Down payment">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tackon-date">Payment Date</label>
+          <input type="date" id="tackon-date" class="input-field">
+        </div>
+
+        <!-- Live Calculation Preview -->
+        <div id="tackon-preview" style="padding: 10px 14px; background: var(--sunken); border-radius: var(--radius-sm); margin-bottom: 14px; font-size: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; font-weight: 600;">
+            <span>New Total Actual:</span>
+            <span id="tackon-preview-new-total">0 RON</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 4px; color: var(--ink-2);" id="tackon-preview-diff-row">
+            <span>Vs Estimate:</span>
+            <span id="tackon-preview-diff">On track</span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">🦖 Tack On Cost</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- -------------------------------------------------------- Bottom Sheet: Edit Item -->
+  <div id="edit-sheet" class="sheet-overlay">
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title">Edit Expense</h2>
+        <button class="close-btn" data-close="edit-sheet">&times;</button>
+      </div>
+
+      <form id="edit-item-form">
+        <input type="hidden" id="edit-item-id">
+        <div class="form-group">
+          <label class="form-label" for="edit-title">Title</label>
+          <input type="text" id="edit-title" class="input-field" required>
+        </div>
+
+        <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div>
+            <label class="form-label" for="edit-estimate">Estimated Budget</label>
+            <input type="number" id="edit-estimate" class="input-field" step="any" required>
+          </div>
+          <div>
+            <label class="form-label" for="edit-currency">Currency</label>
+            <select id="edit-currency" class="input-field">
+              <option value="RON">RON</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-category">Category</label>
+          <select id="edit-category" class="input-field">
+            <option value="utilities">💡 Utilities & Heating</option>
+            <option value="home">🏡 Home & Renovation</option>
+            <option value="tech">💻 Tech & Gadgets</option>
+            <option value="auto">🚗 Vehicle & Transport</option>
+            <option value="vacation">✈️ Vacation & Travel</option>
+            <option value="education">🎓 Education & Kids</option>
+            <option value="health">🩺 Health & Wellness</option>
+            <option value="other">📦 Other Major Expense</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-status">Status</label>
+          <select id="edit-status" class="input-field">
+            <option value="planned">📋 Planned / Wishlist</option>
+            <option value="active">⚡ In Progress / Accruing</option>
+            <option value="completed">✅ Purchased / Settled</option>
+            <option value="archived">📦 Archived</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-notes">Notes</label>
+          <textarea id="edit-notes" class="input-field" rows="2"></textarea>
+        </div>
+
+        <!-- Incremental Sub-Costs List on Item -->
+        <div class="form-group">
+          <label class="form-label">Payment Sub-Items / Receipts</label>
+          <div id="edit-costs-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+        </div>
+
+        <button type="submit" class="btn-primary">Update Item</button>
+        <button type="button" id="btn-delete-item" class="btn-secondary btn-danger">Delete Item</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- -------------------------------------------------------- Bottom Sheet: Audit History -->
+  <div id="history-sheet" class="sheet-overlay">
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title">Activity & Audit Log</h2>
+        <button class="close-btn" data-close="history-sheet">&times;</button>
+      </div>
+
+      <div class="timeline" id="audit-timeline">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- -------------------------------------------------------- Bottom Sheet: Settings -->
+  <div id="settings-sheet" class="sheet-overlay">
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title">App & Family Settings</h2>
+        <button class="close-btn" data-close="settings-sheet">&times;</button>
+      </div>
+
+      <form id="settings-form">
+        <div class="form-group">
+          <label class="form-label" for="set-device-name">My Device Name</label>
+          <input type="text" id="set-device-name" class="input-field" required maxlength="32">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="set-default-currency">Default Currency</label>
+          <select id="set-default-currency" class="input-field">
+            <option value="RON">RON (Romanian Leu)</option>
+            <option value="EUR">EUR (Euro)</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label class="form-label" for="set-threshold-ron">Big Ticket Min (RON)</label>
+            <input type="number" id="set-threshold-ron" class="input-field" step="any">
+          </div>
+          <div>
+            <label class="form-label" for="set-threshold-eur">Big Ticket Min (EUR)</label>
+            <input type="number" id="set-threshold-eur" class="input-field" step="any">
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">Save Settings</button>
+        <button type="button" id="btn-check-update" class="btn-secondary" style="margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <span>🔄</span> Check for Updates & Reload
+        </button>
+
+        <div style="margin-top: 18px; text-align: center; font-size: 0.8rem; color: var(--ink-3); font-weight: 650; letter-spacing: 0.02em;" id="app-version-display">
+          🦖 Spendosaurus v1.1.0 (Build 2026.09.01)
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Application JS Modules -->
+  <script type="module" src="/app.js?v=14"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Spendosaurus Caddyfile routing snippet
+# Add under the private admin listener:
+handle /spendosaurus/api/* {
+    uri strip_prefix /spendosaurus
+    reverse_proxy 127.0.0.1:3090 {
+        header_up X-Admin 1
+    }
+}
+
+# Add under the public listener:
+handle /spendosaurus/* {
+    uri strip_prefix /spendosaurus
+    reverse_proxy 127.0.0.1:3090 {
+        # Strip X-Admin to prevent public privilege escalation
+        header_up -X-Admin
+    }
+}
