@@ -38,8 +38,8 @@ const state = {
 };
 
 // App Build Info
-export const CLIENT_BUILD = '20260901.4';
-export const APP_VERSION = 'v1.3.1 (Build 2026.09.01)';
+export const CLIENT_BUILD = '20260901.5';
+export const APP_VERSION = 'v1.3.2 (Build 2026.09.01)';
 
 // ---------------------------------------------------------------- Cache Buster & Updater
 
@@ -256,8 +256,19 @@ function renderOverview() {
   }
 }
 
-function renderFeed() {
+function renderFeed(animate = true) {
   const feed = document.getElementById('items-feed');
+
+  // 1. FIRST: Capture top positions of all existing cards before DOM update
+  const firstPositions = new Map();
+  if (animate) {
+    feed.querySelectorAll('.item-card-wrapper').forEach((el) => {
+      if (el.dataset.id) {
+        firstPositions.set(el.dataset.id, el.getBoundingClientRect().top);
+      }
+    });
+  }
+
   feed.innerHTML = '';
 
   const threshold = state.currentCurrency === 'EUR' ? state.settings.threshold_eur : state.settings.threshold_ron;
@@ -288,6 +299,8 @@ function renderFeed() {
     `;
     return;
   }
+
+  const renderedCards = [];
 
   filtered.forEach((item) => {
     const cardWrapper = document.createElement('div');
@@ -377,7 +390,49 @@ function renderFeed() {
     });
 
     feed.appendChild(cardWrapper);
+    renderedCards.push({ wrapper: cardWrapper, id: item.id });
   });
+
+  // 2. LAST, INVERT, PLAY: Animate cards that moved or appeared
+  if (animate && firstPositions.size > 0) {
+    requestAnimationFrame(() => {
+      renderedCards.forEach(({ wrapper, id }) => {
+        const lastTop = wrapper.getBoundingClientRect().top;
+        const firstTop = firstPositions.get(id);
+
+        if (firstTop !== undefined) {
+          const deltaY = firstTop - lastTop;
+          if (Math.abs(deltaY) > 2) {
+            // Card changed position!
+            const movedUp = deltaY > 0;
+
+            // Show directional tag
+            const tag = document.createElement('div');
+            tag.className = `move-direction-tag ${movedUp ? 'up' : 'down'}`;
+            tag.innerHTML = movedUp ? `<span>⬆️</span> <span>Moved Up</span>` : `<span>⬇️</span> <span>Moved Down</span>`;
+            wrapper.querySelector('.card-surface').appendChild(tag);
+            setTimeout(() => tag.remove(), 1600);
+
+            // Invert
+            wrapper.style.transform = `translateY(${deltaY}px)`;
+            wrapper.style.transition = 'none';
+            wrapper.classList.add(movedUp ? 'moving-up' : 'moving-down');
+
+            // Play on next tick
+            requestAnimationFrame(() => {
+              wrapper.style.transition = 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1)';
+              wrapper.style.transform = 'translateY(0)';
+              setTimeout(() => {
+                wrapper.classList.remove('moving-up', 'moving-down');
+                wrapper.style.transition = '';
+                wrapper.style.transform = '';
+              }, 450);
+            });
+          }
+        }
+      });
+    });
+  }
 }
 
 // ---------------------------------------------------------------- Item Actions
