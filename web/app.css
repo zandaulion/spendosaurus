@@ -330,6 +330,51 @@ button {
   border-radius: var(--radius);
   overflow: hidden;
   touch-action: pan-y;
+  will-change: transform;
+}
+
+.item-card-wrapper.moving-up .card-surface {
+  box-shadow: 0 0 0 2px var(--brand-dino), 0 8px 24px rgba(56, 161, 105, 0.22);
+}
+
+.item-card-wrapper.moving-down .card-surface {
+  box-shadow: 0 0 0 2px var(--brand-gold), 0 8px 24px rgba(214, 158, 46, 0.22);
+}
+
+.move-direction-tag {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 10;
+  padding: 4px 9px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  animation: fadeOutMoveTag 1.5s forwards cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.move-direction-tag.up {
+  background: #E6FFFA;
+  color: #234E52;
+  border: 1px solid #38A169;
+}
+
+.move-direction-tag.down {
+  background: #FEFCBF;
+  color: #744210;
+  border: 1px solid #D69E2E;
+}
+
+@keyframes fadeOutMoveTag {
+  0% { opacity: 0; transform: translateY(-6px) scale(0.9); }
+  18% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-6px) scale(0.95); }
 }
 
 .swipe-action-bg {
