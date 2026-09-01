@@ -1,31 +1,20 @@
-const CACHE_NAME = 'spendosaurus-shell-v15';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/app.css?v=15',
-  '/app.js?v=15',
-  '/gestures.js',
-  '/mascot.js',
-  '/manifest.webmanifest',
-  '/icons/icon.svg'
-];
+const CACHE_NAME = 'spendosaurus-v16';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim()).then(() => {
+    caches.keys().then((keys) => {
+      // Wipe ALL old caches unconditionally
+      return Promise.all(keys.map((k) => caches.delete(k)));
+    }).then(() => self.clients.claim()).then(() => {
+      // Force reload all open windows
       return self.clients.matchAll({ type: 'window' }).then((clients) => {
         for (const client of clients) {
           if (client.navigate) {
-            client.navigate(client.url);
+            client.navigate('/?updated=' + Date.now());
           }
         }
       });
@@ -36,39 +25,27 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Never cache API calls or mutating requests
+  // Never intercept API requests
   if (url.pathname.startsWith('/api/') || e.request.method !== 'GET') {
     return;
   }
 
-  // For HTML / navigation requests: strictly network-first, fallback to cache only if offline
-  if (e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
-    e.respondWith(
-      fetch(e.request)
-        .then((networkRes) => {
-          if (networkRes.ok) {
-            const clone = networkRes.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-          }
-          return networkRes;
-        })
-        .catch(() => caches.match(e.request).then((cached) => cached || caches.match('/index.html')))
-    );
-    return;
-  }
-
-  // For other static assets (JS, CSS, icons): Stale-while-revalidate
+  // Network-first for EVERYTHING: Always get latest from server if online, fallback to cache only if offline
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const fetchPromise = fetch(e.request).then((networkRes) => {
+    fetch(e.request, { cache: 'no-cache' })
+      .then((networkRes) => {
         if (networkRes.ok) {
           const clone = networkRes.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
         }
         return networkRes;
-      }).catch(() => cached);
-
-      return cached || fetchPromise;
-    })
+      })
+      .catch(() => {
+        return caches.match(e.request).then((cached) => {
+          if (cached) return cached;
+          if (e.request.mode === 'navigate') return caches.match('/index.html');
+          return new Response('Offline', { status: 503, statusText: 'Offline' });
+        });
+      })
   );
 });

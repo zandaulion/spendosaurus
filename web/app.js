@@ -38,8 +38,8 @@ const state = {
 };
 
 // App Build Info
-export const CLIENT_BUILD = '20260901.2';
-export const APP_VERSION = 'v1.2.1 (Build 2026.09.01)';
+export const CLIENT_BUILD = '20260901.3';
+export const APP_VERSION = 'v1.3.0 (Build 2026.09.01)';
 
 // ---------------------------------------------------------------- Cache Buster & Updater
 
@@ -70,8 +70,8 @@ export async function purgeAndReload(msg = 'Wiping cache & reloading...') {
   }
 
   setTimeout(() => {
-    window.location.replace('/?t=' + Date.now());
-  }, 400);
+    window.location.href = window.location.origin + '/?v=' + Date.now();
+  }, 350);
 }
 
 // ---------------------------------------------------------------- API Helpers
