@@ -89,12 +89,18 @@ button {
   overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;
 }
 
-/* ---------------------------------------------------------------- Header */
+/* ---------------------------------------------------------------- Top Fixed Region */
 
-.app-header {
+.top-fixed-region {
   position: sticky;
   top: 0;
   z-index: 40;
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+}
+
+.app-header {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   padding: calc(10px + var(--safe-top)) 16px 10px;
@@ -167,10 +173,21 @@ button {
 
 /* ---------------------------------------------------------------- Summary Stats Card */
 
+.overview-fixed-wrapper {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 10px 14px 10px;
+}
+
+.overview-fixed-wrapper .stats-card {
+  margin-bottom: 0;
+  padding: 12px 14px;
+}
+
 .container {
   max-width: 620px;
   margin: 0 auto;
-  padding: 14px 14px;
+  padding: 10px 14px 14px;
 }
 
 .stats-card {

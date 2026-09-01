@@ -1,9 +1,9 @@
-const CACHE_NAME = 'spendosaurus-shell-v14';
+const CACHE_NAME = 'spendosaurus-shell-v15';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/app.css?v=14',
-  '/app.js?v=14',
+  '/app.css?v=15',
+  '/app.js?v=15',
   '/gestures.js',
   '/mascot.js',
   '/manifest.webmanifest',
