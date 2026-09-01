@@ -38,8 +38,8 @@ const state = {
 };
 
 // App Build Info
-export const CLIENT_BUILD = '20260901.5';
-export const APP_VERSION = 'v1.3.2 (Build 2026.09.01)';
+export const CLIENT_BUILD = '20260901.6';
+export const APP_VERSION = 'v1.3.3 (Build 2026.09.01)';
 
 // ---------------------------------------------------------------- Cache Buster & Updater
 
@@ -411,7 +411,7 @@ function renderFeed(animate = true) {
             tag.className = `move-direction-tag ${movedUp ? 'up' : 'down'}`;
             tag.innerHTML = movedUp ? `<span>⬆️</span> <span>Moved Up</span>` : `<span>⬇️</span> <span>Moved Down</span>`;
             wrapper.querySelector('.card-surface').appendChild(tag);
-            setTimeout(() => tag.remove(), 1600);
+            setTimeout(() => tag.remove(), 2500);
 
             // Invert
             wrapper.style.transform = `translateY(${deltaY}px)`;
@@ -420,13 +420,13 @@ function renderFeed(animate = true) {
 
             // Play on next tick
             requestAnimationFrame(() => {
-              wrapper.style.transition = 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1)';
+              wrapper.style.transition = 'transform 0.85s cubic-bezier(0.2, 1, 0.25, 1)';
               wrapper.style.transform = 'translateY(0)';
               setTimeout(() => {
                 wrapper.classList.remove('moving-up', 'moving-down');
                 wrapper.style.transition = '';
                 wrapper.style.transform = '';
-              }, 450);
+              }, 900);
             });
           }
         }

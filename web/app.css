@@ -346,16 +346,16 @@ button {
   top: 10px;
   right: 12px;
   z-index: 10;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border-radius: 12px;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  animation: fadeOutMoveTag 1.5s forwards cubic-bezier(0.16, 1, 0.3, 1);
+  animation: fadeOutMoveTag 2.4s forwards cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .move-direction-tag.up {
@@ -371,10 +371,10 @@ button {
 }
 
 @keyframes fadeOutMoveTag {
-  0% { opacity: 0; transform: translateY(-6px) scale(0.9); }
-  18% { opacity: 1; transform: translateY(0) scale(1); }
-  75% { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-6px) scale(0.95); }
+  0% { opacity: 0; transform: translateY(-8px) scale(0.88); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.92); }
 }
 
 .swipe-action-bg {
