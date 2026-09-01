@@ -1,6 +1,6 @@
 {
   "name": "spendosaurus",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Spendosaurus — Family big-ticket spending & incremental cost tracker PWA",
   "main": "server/index.js",
   "type": "module",
