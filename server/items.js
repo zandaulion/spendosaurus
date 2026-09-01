@@ -107,7 +107,7 @@ export function listItems({ status, currency, minAmount, category, search } = {}
     params.push(`%${search}%`, `%${search}%`);
   }
 
-  query += " ORDER BY CASE status WHEN 'active' THEN 1 WHEN 'planned' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, created_at DESC";
+  query += " ORDER BY CASE status WHEN 'active' THEN 1 WHEN 'planned' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, title COLLATE NOCASE ASC";
 
   const items = db.prepare(query).all(...params);
 

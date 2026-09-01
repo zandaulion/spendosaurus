@@ -278,8 +278,8 @@ app.get('/api/settings', requireDevice, (req, res) => {
 app.get('/api/version', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.json({
-    version: '1.3.3',
-    build: '20260901.6',
+    version: '1.3.4',
+    build: '20260901.7',
     timestamp: Date.now()
   });
 });

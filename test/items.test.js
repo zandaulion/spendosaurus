@@ -169,4 +169,14 @@ describe('Spendosaurus Items & Incremental Cost System', () => {
     assert.ok(stats.categories.home);
     assert.ok(stats.categories.vacation);
   });
+
+  it('sorts items primarily by status and secondarily by name (A-Z)', () => {
+    createItem({ title: 'Zebra Rug', category: 'home', currency: 'EUR', estimated_amount: 300, status: 'planned' }, mockDevice);
+    createItem({ title: 'Apple MacBook', category: 'tech', currency: 'EUR', estimated_amount: 2000, status: 'planned' }, mockDevice);
+    createItem({ title: 'Banana Plant', category: 'home', currency: 'EUR', estimated_amount: 50, status: 'planned' }, mockDevice);
+
+    const eurItems = listItems({ currency: 'EUR' });
+    const plannedEurTitles = eurItems.filter((i) => i.status === 'planned').map((i) => i.title);
+    assert.deepEqual(plannedEurTitles, ['Apple MacBook', 'Banana Plant', 'Greek Summer Holiday', 'Zebra Rug']);
+  });
 });
