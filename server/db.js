@@ -59,6 +59,8 @@ export function initDb() {
       target_date       TEXT,
       settled_date      TEXT,
       notes             TEXT,
+      recurrence        TEXT DEFAULT NULL,
+      current_cycle     TEXT DEFAULT NULL,
       created_by_device TEXT REFERENCES devices(id) ON DELETE SET NULL,
       created_by_label  TEXT,
       created_at        TEXT NOT NULL,
@@ -75,6 +77,7 @@ export function initDb() {
       currency      TEXT NOT NULL DEFAULT 'RON',
       note          TEXT,
       date          TEXT NOT NULL,
+      cycle         TEXT DEFAULT NULL,
       device_id     TEXT REFERENCES devices(id) ON DELETE SET NULL,
       device_label  TEXT,
       created_at    TEXT NOT NULL
@@ -96,6 +99,11 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_audit_item ON audit_log(item_id);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
   `);
+
+  // Safe schema migrations for existing databases
+  try { db.exec("ALTER TABLE items ADD COLUMN recurrence TEXT DEFAULT NULL;"); } catch {}
+  try { db.exec("ALTER TABLE items ADD COLUMN current_cycle TEXT DEFAULT NULL;"); } catch {}
+  try { db.exec("ALTER TABLE item_costs ADD COLUMN cycle TEXT DEFAULT NULL;"); } catch {}
 
   // Initialize default settings if not set
   const getSetting = db.prepare('SELECT value FROM settings WHERE key = ?');

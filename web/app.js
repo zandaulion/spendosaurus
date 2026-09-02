@@ -34,12 +34,13 @@ const state = {
   currentCurrency: 'RON',
   currentStatus: 'all',
   thresholdOnly: false,
+  recurringOnly: false,
   activeItem: null
 };
 
 // App Build Info
-export const CLIENT_BUILD = '20260901.7';
-export const APP_VERSION = 'v1.3.4 (Build 2026.09.01)';
+export const CLIENT_BUILD = '20260902.1';
+export const APP_VERSION = 'v1.4.0 (Build 2026.09.02)';
 
 // ---------------------------------------------------------------- Cache Buster & Updater
 
@@ -278,6 +279,9 @@ function renderFeed(animate = true) {
     // Currency filter
     if (item.currency !== state.currentCurrency) return false;
 
+    // Recurring filter
+    if (state.recurringOnly && !item.recurrence) return false;
+
     // Status filter
     if (state.currentStatus !== 'all' && item.status !== state.currentStatus) return false;
 
@@ -321,6 +325,18 @@ function renderFeed(animate = true) {
     else if (percent >= 80) gaugeClass = 'warning';
 
     const st = STATUS_META[item.status] || STATUS_META.planned;
+    const recurBadge = item.recurrence
+      ? `<span class="badge-recurring">🔁 ${item.recurrence.charAt(0).toUpperCase() + item.recurrence.slice(1)} • ${escapeHtml(item.current_cycle_label || item.current_cycle)}</span>`
+      : '';
+
+    const rolloverHtml = item.is_rollover_due
+      ? `
+        <div class="rollover-prompt no-swipe">
+          <span>✨ <strong>${escapeHtml(item.current_cycle_label || '')}</strong> ended • Next: <strong>${escapeHtml(item.next_cycle_label || '')}</strong></span>
+          <button type="button" class="btn-card-rollover" data-rollover="${item.id}">Settle & Next ➔</button>
+        </div>
+      `
+      : '';
 
     cardWrapper.innerHTML = `
       <div class="swipe-action-bg swipe-action-right">
@@ -333,7 +349,10 @@ function renderFeed(animate = true) {
       <div class="card-surface status-${item.status}">
         <div class="card-top">
           <div>
-            <h3 class="card-title">${escapeHtml(item.title)}</h3>
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+              <h3 class="card-title">${escapeHtml(item.title)}</h3>
+              ${recurBadge}
+            </div>
             <span class="category-tag">${cat.icon} ${cat.label}</span>
           </div>
           <span class="status-badge status-${item.status}">
@@ -344,7 +363,7 @@ function renderFeed(animate = true) {
         <div class="card-amounts">
           <div>
             <span class="amount-current ${isOver ? 'over' : ''}">${item.actual_total.toLocaleString()} ${item.currency}</span>
-            <span style="font-size: 0.78rem; color: var(--ink-3); margin-left: 4px;">actual</span>
+            <span style="font-size: 0.78rem; color: var(--ink-3); margin-left: 4px;">${item.recurrence ? 'this cycle' : 'actual'}</span>
           </div>
           <div class="amount-estimate">
             Est: ${item.estimated_amount.toLocaleString()} ${item.currency}
@@ -356,10 +375,13 @@ function renderFeed(animate = true) {
           <div class="gauge-bar-fill ${gaugeClass}" style="width: ${percent}%;"></div>
         </div>
 
+        ${rolloverHtml}
+
         <div class="card-footer">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span>${item.costs_count || 0} payment${item.costs_count === 1 ? '' : 's'}</span>
             ${item.notes ? '• <span>📝</span>' : ''}
+            ${item.all_time_total && item.recurrence && item.past_cycles?.length > 0 ? `<span style="color: var(--ink-3); font-size: 0.72rem;">(All-time: ${item.all_time_total.toLocaleString()} ${item.currency})</span>` : ''}
           </div>
           <button class="tackon-quick-btn no-swipe" data-tackon="${item.id}">
             <span>+</span> Tack On Cost
@@ -507,6 +529,40 @@ async function openEditSheet(itemId) {
     document.getElementById('edit-category').value = item.category;
     document.getElementById('edit-status').value = item.status;
     document.getElementById('edit-notes').value = item.notes || '';
+    document.getElementById('edit-recurrence').value = item.recurrence || '';
+
+    // Cycle Management & Past Cycles
+    const cycleSection = document.getElementById('edit-cycle-management');
+    const pastCyclesSection = document.getElementById('edit-past-cycles-section');
+    const pastCyclesList = document.getElementById('edit-past-cycles-list');
+
+    if (item.recurrence) {
+      cycleSection.hidden = false;
+      document.getElementById('edit-cycle-badge').textContent = `Current: ${item.current_cycle_label || item.current_cycle}`;
+      document.getElementById('btn-next-cycle-name').textContent = item.next_cycle_label || 'Next Period';
+      document.getElementById('btn-rollover-cycle').dataset.id = item.id;
+
+      if (item.past_cycles && item.past_cycles.length > 0) {
+        pastCyclesSection.hidden = false;
+        pastCyclesList.innerHTML = item.past_cycles.map((pc) => `
+          <div class="past-cycle-row">
+            <div>
+              <strong>${escapeHtml(pc.label || pc.cycle)}</strong>
+              <div style="font-size: 0.72rem; color: var(--ink-3);">${pc.count} payment${pc.count === 1 ? '' : 's'}</div>
+            </div>
+            <div style="text-align: right;">
+              <strong style="color: ${pc.is_over_budget ? 'var(--danger)' : 'var(--accent)'};">${pc.total.toLocaleString()} ${item.currency}</strong>
+              <div style="font-size: 0.72rem; color: var(--ink-3);">${pc.variance > 0 ? `+${pc.variance}` : pc.variance} vs est</div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        pastCyclesSection.hidden = true;
+      }
+    } else {
+      cycleSection.hidden = true;
+      pastCyclesSection.hidden = true;
+    }
 
     // Render costs list with delete buttons
     const costsList = document.getElementById('edit-costs-list');
@@ -656,6 +712,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Status Filter Chips
+  // Status & Attribute Filter Chips
   document.getElementById('filter-bar').addEventListener('click', (e) => {
     const chip = e.target.closest('.filter-chip');
     if (!chip) return;
@@ -667,7 +724,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    document.querySelectorAll('.filter-bar .filter-chip:not(#threshold-filter-btn)').forEach((c) => c.classList.remove('active'));
+    if (chip.id === 'recurring-filter-btn') {
+      state.recurringOnly = !state.recurringOnly;
+      chip.classList.toggle('active', state.recurringOnly);
+      renderFeed();
+      return;
+    }
+
+    document.querySelectorAll('.filter-bar .filter-chip:not(#threshold-filter-btn):not(#recurring-filter-btn)').forEach((c) => c.classList.remove('active'));
     chip.classList.add('active');
     state.currentStatus = chip.dataset.status;
     renderFeed();
@@ -679,13 +743,26 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nav-history').addEventListener('click', () => openHistorySheet());
   document.getElementById('btn-open-settings').addEventListener('click', openSettingsSheet);
 
-  // Feed delegate for tack-on button click
+  // Feed delegate for tack-on and rollover button clicks
   document.getElementById('items-feed').addEventListener('click', (e) => {
+    const rolloverBtn = e.target.closest('[data-rollover]');
+    if (rolloverBtn) {
+      e.stopPropagation();
+      handleRolloverCycle(rolloverBtn.dataset.rollover);
+      return;
+    }
+
     const tackBtn = e.target.closest('[data-tackon]');
     if (tackBtn) {
       e.stopPropagation();
       openTackonSheet(tackBtn.dataset.tackon);
     }
+  });
+
+  // Rollover Cycle button inside Edit modal
+  document.getElementById('btn-rollover-cycle').addEventListener('click', (e) => {
+    const id = e.currentTarget.dataset.id;
+    if (id) handleRolloverCycle(id);
   });
 
   // Quick increment chips on tack-on sheet
@@ -733,6 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
       title: document.getElementById('add-title').value,
       estimated_amount: document.getElementById('add-estimate').value,
       currency: document.getElementById('add-currency').value,
+      recurrence: document.getElementById('add-recurrence').value || null,
       category: document.getElementById('add-category').value,
       status: document.getElementById('add-status').value,
       initial_cost: document.getElementById('add-initial-cost').value,
@@ -782,6 +860,7 @@ document.addEventListener('DOMContentLoaded', () => {
       title: document.getElementById('edit-title').value,
       estimated_amount: document.getElementById('edit-estimate').value,
       currency: document.getElementById('edit-currency').value,
+      recurrence: document.getElementById('edit-recurrence').value || null,
       category: document.getElementById('edit-category').value,
       status: document.getElementById('edit-status').value,
       notes: document.getElementById('edit-notes').value
@@ -798,6 +877,23 @@ document.addEventListener('DOMContentLoaded', () => {
       alert(err.message);
     }
   });
+
+async function handleRolloverCycle(id) {
+  const item = state.items.find((i) => i.id === id);
+  const title = item ? item.title : 'this item';
+  const nextName = item ? (item.next_cycle_label || 'next cycle') : 'next cycle';
+  if (!confirm(`Settle active cycle and start ${nextName} for "${title}"?`)) return;
+  if (navigator.vibrate) navigator.vibrate([25, 40, 25]);
+  try {
+    await api(`/api/items/${id}/rollover`, { method: 'POST' });
+    if (state.activeItem && state.activeItem.id === id) {
+      openEditSheet(id);
+    }
+    await loadData();
+  } catch (err) {
+    alert(err.message);
+  }
+}
 
   // Delete Cost Sub-item in Edit modal
   document.getElementById('edit-costs-list').addEventListener('click', async (e) => {

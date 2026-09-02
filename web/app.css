@@ -305,6 +305,64 @@ button {
   border-color: var(--warn);
 }
 
+.filter-chip.recurring-chip.active {
+  background: #2B6CB0;
+  color: #FFFFFF;
+  border-color: #2B6CB0;
+}
+
+.badge-recurring {
+  background: #EBF8FF;
+  color: #2B6CB0;
+  border: 1px solid #BEE3F8;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+}
+
+.rollover-prompt {
+  background: #FEFCBF;
+  color: #744210;
+  border: 1px solid #ECC94B;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.rollover-prompt button {
+  background: #D69E2E;
+  color: #FFFFFF;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.past-cycle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+}
+
 /* ---------------------------------------------------------------- Feed & Cards */
 
 .items-feed {
