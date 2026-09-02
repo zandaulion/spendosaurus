@@ -27,6 +27,7 @@ import {
   deleteItem,
   addCost,
   deleteCost,
+  rolloverItemCycle,
   getSettings,
   updateSettings,
   getStats
@@ -155,13 +156,14 @@ app.post('/api/auth/label', requireDevice, (req, res) => {
 // List items with optional filters
 app.get('/api/items', requireDevice, (req, res) => {
   try {
-    const { status, currency, min_amount, category, search } = req.query;
+    const { status, currency, min_amount, category, search, recurring } = req.query;
     const items = listItems({
       status,
       currency,
       minAmount: min_amount,
       category,
-      search
+      search,
+      recurring
     });
     res.json({ items });
   } catch (err) {
@@ -205,6 +207,16 @@ app.patch('/api/items/:id/status', requireDevice, (req, res) => {
   try {
     const { status } = req.body || {};
     const item = updateItemStatus(req.params.id, status, req.device);
+    res.json({ item });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// Rollover recurring cycle
+app.post('/api/items/:id/rollover', requireDevice, (req, res) => {
+  try {
+    const item = rolloverItemCycle(req.params.id, req.device);
     res.json({ item });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -278,8 +290,8 @@ app.get('/api/settings', requireDevice, (req, res) => {
 app.get('/api/version', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.json({
-    version: '1.3.4',
-    build: '20260901.7',
+    version: '1.4.0',
+    build: '20260902.1',
     timestamp: Date.now()
   });
 });

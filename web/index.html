@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/app.css?v=20">
+  <link rel="stylesheet" href="/app.css?v=21">
 </head>
 <body>
 
@@ -98,6 +98,7 @@
         <button class="filter-chip" data-status="active">⚡ In Progress</button>
         <button class="filter-chip" data-status="planned">📋 Planned</button>
         <button class="filter-chip" data-status="completed">✅ Completed</button>
+        <button class="filter-chip recurring-chip" id="recurring-filter-btn" data-recurring="true">🔁 Recurring</button>
         <button class="filter-chip threshold-chip" id="threshold-filter-btn" data-threshold="true">🔥 Big Ticket Only</button>
       </nav>
 
@@ -152,6 +153,16 @@
               <option value="EUR">EUR</option>
             </select>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="add-recurrence">Recurrence</label>
+          <select id="add-recurrence" class="input-field">
+            <option value="">One-off purchase / project (Standard)</option>
+            <option value="monthly">🔁 Monthly (Utilities, Heating, Subscriptions)</option>
+            <option value="quarterly">🔁 Quarterly (Taxes, Seasonal Maintenance)</option>
+            <option value="yearly">🔁 Yearly (Insurance, Tuition, Annual Fees)</option>
+          </select>
         </div>
 
         <div class="form-group">
@@ -281,6 +292,33 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label" for="edit-recurrence">Recurrence</label>
+          <select id="edit-recurrence" class="input-field">
+            <option value="">One-off purchase / project (Standard)</option>
+            <option value="monthly">🔁 Monthly (Utilities, Heating, Subscriptions)</option>
+            <option value="quarterly">🔁 Quarterly (Taxes, Seasonal Maintenance)</option>
+            <option value="yearly">🔁 Yearly (Insurance, Tuition, Annual Fees)</option>
+          </select>
+        </div>
+
+        <!-- Cycle Management (Visible for recurring items) -->
+        <div id="edit-cycle-management" class="form-group" style="background: var(--sunken); padding: 12px; border-radius: var(--radius-sm);" hidden>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <span style="font-size: 0.8rem; font-weight: 700; color: var(--ink-2); text-transform: uppercase;">Active Cycle</span>
+            <span id="edit-cycle-badge" class="cycle-pill" style="font-size: 0.78rem; font-weight: 700; padding: 2px 8px; background: var(--surface); border-radius: 10px; border: 1px solid var(--line);">Sep 2026</span>
+          </div>
+          <button type="button" id="btn-rollover-cycle" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; font-weight: 700;">
+            <span>🔁</span> Settle & Start Next Cycle (<span id="btn-next-cycle-name">Oct 2026</span>)
+          </button>
+        </div>
+
+        <!-- Past Cycles History (Visible for recurring items with history) -->
+        <div id="edit-past-cycles-section" class="form-group" hidden>
+          <label class="form-label">Past Cycles & History</label>
+          <div id="edit-past-cycles-list" class="past-cycles-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+        </div>
+
+        <div class="form-group">
           <label class="form-label" for="edit-category">Category</label>
           <select id="edit-category" class="input-field">
             <option value="utilities">💡 Utilities & Heating</option>
@@ -383,6 +421,6 @@
   </div>
 
   <!-- Application JS Modules -->
-  <script type="module" src="/app.js?v=20"></script>
+  <script type="module" src="/app.js?v=21"></script>
 </body>
 </html>

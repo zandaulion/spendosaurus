@@ -14,6 +14,90 @@ export const VALID_CATEGORIES = [
 ];
 
 export const VALID_STATUSES = ['planned', 'active', 'completed', 'archived'];
+export const VALID_RECURRENCES = ['monthly', 'quarterly', 'yearly'];
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function getCurrentPeriodKey(recurrence, d = new Date()) {
+  if (!VALID_RECURRENCES.includes(recurrence)) return null;
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1; // 1-12
+  if (recurrence === 'monthly') {
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  if (recurrence === 'quarterly') {
+    const q = Math.ceil(month / 3);
+    return `${year}-Q${q}`;
+  }
+  if (recurrence === 'yearly') {
+    return `${year}`;
+  }
+  return null;
+}
+
+export function getNextPeriodKey(cycleKey, recurrence) {
+  if (!cycleKey) return getCurrentPeriodKey(recurrence);
+  if (recurrence === 'monthly') {
+    const [yStr, mStr] = cycleKey.split('-');
+    let y = parseInt(yStr, 10);
+    let m = parseInt(mStr, 10) + 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+  if (recurrence === 'quarterly') {
+    const [yStr, qStr] = cycleKey.split('-Q');
+    let y = parseInt(yStr, 10);
+    let q = parseInt(qStr, 10) + 1;
+    if (q > 4) {
+      q = 1;
+      y += 1;
+    }
+    return `${y}-Q${q}`;
+  }
+  if (recurrence === 'yearly') {
+    const y = parseInt(cycleKey, 10) + 1;
+    return `${y}`;
+  }
+  return null;
+}
+
+export function getPeriodKeyForDate(recurrence, dateStr) {
+  if (!recurrence || !dateStr) return null;
+  const parts = dateStr.slice(0, 10).split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(y) || isNaN(m)) return null;
+  if (recurrence === 'monthly') {
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+  if (recurrence === 'quarterly') {
+    const q = Math.ceil(m / 3);
+    return `${y}-Q${q}`;
+  }
+  if (recurrence === 'yearly') {
+    return `${y}`;
+  }
+  return null;
+}
+
+export function formatCycleLabel(cycleKey, recurrence) {
+  if (!cycleKey) return '';
+  if (recurrence === 'monthly') {
+    const [y, m] = cycleKey.split('-');
+    const mIdx = parseInt(m, 10) - 1;
+    return `${MONTH_NAMES[mIdx] || m} ${y}`;
+  }
+  if (recurrence === 'quarterly') {
+    return `${cycleKey.replace('-', ' ')}`;
+  }
+  if (recurrence === 'yearly') {
+    return cycleKey;
+  }
+  return cycleKey;
+}
 
 function formatAmount(val) {
   const num = parseFloat(val);
@@ -25,7 +109,7 @@ export function getSettings() {
   const map = {};
   for (const r of rows) map[r.key] = r.value;
   return {
-    app_version: '1.1.0',
+    app_version: '1.4.0',
     default_currency: map.default_currency || 'RON',
     threshold_ron: parseFloat(map.threshold_ron || '500'),
     threshold_eur: parseFloat(map.threshold_eur || '100'),
@@ -55,32 +139,88 @@ export function updateSettings(updates, device) {
 }
 
 /**
- * Compute item totals and cost breakdown.
+ * Compute item totals, cycle scoping, and cost breakdown.
  */
 function enrichItem(item, costs = null) {
   const itemCosts = costs !== null ? costs : db.prepare(`
-    SELECT id, item_id, amount, currency, note, date, device_id, device_label, created_at
+    SELECT id, item_id, amount, currency, note, date, cycle, device_id, device_label, created_at
     FROM item_costs WHERE item_id = ? ORDER BY date DESC, created_at DESC
   `).all(item.id);
 
-  const totalActual = itemCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const recurrence = VALID_RECURRENCES.includes(item.recurrence) ? item.recurrence : null;
+  const currentCycleKey = recurrence ? (item.current_cycle || getCurrentPeriodKey(recurrence)) : null;
+
+  let activeCosts = itemCosts;
+  const pastCyclesMap = {};
+
+  if (recurrence && currentCycleKey) {
+    activeCosts = [];
+    for (const c of itemCosts) {
+      const costCycle = c.cycle || getPeriodKeyForDate(recurrence, c.date) || currentCycleKey;
+      if (costCycle === currentCycleKey) {
+        activeCosts.push(c);
+      } else {
+        if (!pastCyclesMap[costCycle]) {
+          pastCyclesMap[costCycle] = {
+            cycle: costCycle,
+            label: formatCycleLabel(costCycle, recurrence),
+            total: 0,
+            count: 0,
+            costs: []
+          };
+        }
+        pastCyclesMap[costCycle].total += (c.amount || 0);
+        pastCyclesMap[costCycle].count++;
+        pastCyclesMap[costCycle].costs.push(c);
+      }
+    }
+  }
+
   const estimated = item.estimated_amount || 0;
-  const variance = totalActual - estimated; // positive = over budget, negative = under budget
+  const totalActual = activeCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const allTimeActual = itemCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const variance = totalActual - estimated;
   const percentUsed = estimated > 0 ? Math.round((totalActual / estimated) * 100) : 0;
+
+  let isRolloverDue = false;
+  if (recurrence && currentCycleKey) {
+    const nowPeriod = getCurrentPeriodKey(recurrence);
+    if (nowPeriod && nowPeriod > currentCycleKey) {
+      isRolloverDue = true;
+    }
+  }
+
+  const pastCycles = Object.values(pastCyclesMap)
+    .map((pc) => ({
+      ...pc,
+      total: Math.round(pc.total * 100) / 100,
+      variance: Math.round((pc.total - estimated) * 100) / 100,
+      percent_used: estimated > 0 ? Math.round((pc.total / estimated) * 100) : 0,
+      is_over_budget: estimated > 0 && pc.total > (estimated * 1.10)
+    }))
+    .sort((a, b) => b.cycle.localeCompare(a.cycle));
 
   return {
     ...item,
+    recurrence,
+    current_cycle: currentCycleKey,
+    current_cycle_label: recurrence ? formatCycleLabel(currentCycleKey, recurrence) : null,
+    next_cycle_label: recurrence ? formatCycleLabel(getNextPeriodKey(currentCycleKey, recurrence), recurrence) : null,
+    is_rollover_due: isRolloverDue,
     estimated_amount: estimated,
     actual_total: Math.round(totalActual * 100) / 100,
+    all_time_total: Math.round(allTimeActual * 100) / 100,
     variance: Math.round(variance * 100) / 100,
     percent_used: percentUsed,
     is_over_budget: estimated > 0 && totalActual > (estimated * 1.10),
-    costs_count: itemCosts.length,
-    costs: itemCosts
+    costs_count: activeCosts.length,
+    all_time_costs_count: itemCosts.length,
+    costs: activeCosts,
+    past_cycles: pastCycles
   };
 }
 
-export function listItems({ status, currency, minAmount, category, search } = {}) {
+export function listItems({ status, currency, minAmount, category, search, recurring } = {}) {
   let query = 'SELECT * FROM items WHERE 1=1';
   const params = [];
 
@@ -90,6 +230,12 @@ export function listItems({ status, currency, minAmount, category, search } = {}
   } else if (!status || status === 'all') {
     // By default exclude archived unless explicitly requested
     query += " AND status != 'archived'";
+  }
+
+  if (recurring === 'true' || recurring === true) {
+    query += ' AND recurrence IS NOT NULL';
+  } else if (recurring === 'false' || recurring === false) {
+    query += ' AND recurrence IS NULL';
   }
 
   if (currency) {
@@ -157,36 +303,40 @@ export function createItem(data, device = {}) {
   const status = VALID_STATUSES.includes(data.status) ? data.status : 'planned';
   const targetDate = data.target_date || null;
   const notes = data.notes || null;
+  const recurrence = VALID_RECURRENCES.includes(data.recurrence) ? data.recurrence : null;
+  const currentCycle = recurrence ? (data.current_cycle || getCurrentPeriodKey(recurrence)) : null;
   const deviceId = resolveDeviceId(device);
   const deviceLabel = device.label || 'Family Member';
 
   db.prepare(`
     INSERT INTO items (
       id, title, category, currency, estimated_amount,
-      status, target_date, notes, created_by_device,
-      created_by_label, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, target_date, notes, recurrence, current_cycle,
+      created_by_device, created_by_label, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, title, category, currency, estimatedAmount,
-    status, targetDate, notes, deviceId,
-    deviceLabel, now, now
+    status, targetDate, notes, recurrence, currentCycle,
+    deviceId, deviceLabel, now, now
   );
 
   // If an initial cost is provided at creation time, add it
   if (data.initial_cost && parseFloat(data.initial_cost) > 0) {
     const costId = 'cost_' + crypto.randomBytes(8).toString('hex');
     const costAmt = formatAmount(data.initial_cost);
+    const initialCycle = recurrence ? (currentCycle || getCurrentPeriodKey(recurrence)) : null;
     db.prepare(`
-      INSERT INTO item_costs (id, item_id, amount, currency, note, date, device_id, device_label, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(costId, id, costAmt, currency, data.initial_cost_note || 'Initial payment', data.initial_cost_date || now.slice(0, 10), deviceId, deviceLabel, now);
+      INSERT INTO item_costs (id, item_id, amount, currency, note, date, cycle, device_id, device_label, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(costId, id, costAmt, currency, data.initial_cost_note || 'Initial payment', data.initial_cost_date || now.slice(0, 10), initialCycle, deviceId, deviceLabel, now);
   }
 
+  const recurStr = recurrence ? ` (${recurrence})` : '';
   recordAudit({
     itemId: id,
     action: 'create_item',
-    summary: `${device.label} created "${title}" (Estimate: ${estimatedAmount} ${currency})`,
-    details: { title, category, currency, estimatedAmount, status },
+    summary: `${device.label} created "${title}"${recurStr} (Estimate: ${estimatedAmount} ${currency})`,
+    details: { title, category, currency, estimatedAmount, status, recurrence, currentCycle },
     deviceId: device.id,
     deviceLabel: device.label
   });
@@ -210,16 +360,33 @@ export function updateItem(id, data, device) {
   const targetDate = data.target_date !== undefined ? data.target_date : existing.target_date;
   const settledDate = data.settled_date !== undefined ? data.settled_date : existing.settled_date;
   const notes = data.notes !== undefined ? data.notes : existing.notes;
+  
+  const recurrence = data.recurrence !== undefined
+    ? (VALID_RECURRENCES.includes(data.recurrence) ? data.recurrence : null)
+    : existing.recurrence;
+  
+  let currentCycle = existing.current_cycle;
+  if (recurrence && !currentCycle) {
+    currentCycle = getCurrentPeriodKey(recurrence);
+  } else if (!recurrence) {
+    currentCycle = null;
+  }
+  if (data.current_cycle !== undefined && recurrence) {
+    currentCycle = data.current_cycle;
+  }
+
   const now = nowIso();
 
   db.prepare(`
     UPDATE items SET
       title = ?, category = ?, currency = ?, estimated_amount = ?,
-      status = ?, target_date = ?, settled_date = ?, notes = ?, updated_at = ?
+      status = ?, target_date = ?, settled_date = ?, notes = ?,
+      recurrence = ?, current_cycle = ?, updated_at = ?
     WHERE id = ?
   `).run(
     title, category, currency, estimatedAmount,
-    status, targetDate, settledDate, notes, now,
+    status, targetDate, settledDate, notes,
+    recurrence, currentCycle, now,
     id
   );
 
@@ -230,6 +397,7 @@ export function updateItem(id, data, device) {
   if (existing.currency !== currency) diff.currency = { old: existing.currency, new: currency };
   if (existing.estimated_amount !== estimatedAmount) diff.estimated_amount = { old: existing.estimated_amount, new: estimatedAmount };
   if (existing.status !== status) diff.status = { old: existing.status, new: status };
+  if (existing.recurrence !== recurrence) diff.recurrence = { old: existing.recurrence, new: recurrence };
 
   recordAudit({
     itemId: id,
@@ -238,6 +406,52 @@ export function updateItem(id, data, device) {
     details: diff,
     deviceId: device.id,
     deviceLabel: device.label
+  });
+
+  return getItem(id);
+}
+
+export function rolloverItemCycle(id, device = {}) {
+  const item = getItem(id);
+  if (!item) {
+    const err = new Error('Item not found');
+    err.status = 404;
+    throw err;
+  }
+  if (!item.recurrence) {
+    const err = new Error('Item is not recurring');
+    err.status = 400;
+    throw err;
+  }
+
+  const prevCycle = item.current_cycle;
+  const prevLabel = item.current_cycle_label || prevCycle;
+  const prevActual = item.actual_total;
+  const nextCycle = getNextPeriodKey(prevCycle, item.recurrence);
+  const nextLabel = formatCycleLabel(nextCycle, item.recurrence);
+  const now = nowIso();
+  const deviceLabel = device.label || 'Family Member';
+
+  // Advance cycle and reset status to planned
+  db.prepare(`
+    UPDATE items SET current_cycle = ?, status = 'planned', updated_at = ?
+    WHERE id = ?
+  `).run(nextCycle, now, id);
+
+  recordAudit({
+    itemId: id,
+    action: 'rollover_cycle',
+    summary: `${deviceLabel} settled ${prevLabel} (${prevActual} ${item.currency}) and started ${nextLabel} for "${item.title}"`,
+    details: {
+      prev_cycle: prevCycle,
+      prev_label: prevLabel,
+      prev_actual: prevActual,
+      estimated_amount: item.estimated_amount,
+      next_cycle: nextCycle,
+      next_label: nextLabel
+    },
+    deviceId: device.id,
+    deviceLabel: deviceLabel
   });
 
   return getItem(id);
@@ -321,13 +535,14 @@ export function addCost(itemId, costData, device = {}) {
   const date = costData.date || now.slice(0, 10);
   const note = (costData.note || '').trim() || null;
   const currency = costData.currency || item.currency || 'RON';
+  const cycle = item.recurrence ? (item.current_cycle || getCurrentPeriodKey(item.recurrence)) : null;
   const deviceId = resolveDeviceId(device);
   const deviceLabel = device.label || 'Family Member';
 
   db.prepare(`
-    INSERT INTO item_costs (id, item_id, amount, currency, note, date, device_id, device_label, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(costId, itemId, amount, currency, note, date, deviceId, deviceLabel, now);
+    INSERT INTO item_costs (id, item_id, amount, currency, note, date, cycle, device_id, device_label, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(costId, itemId, amount, currency, note, date, cycle, deviceId, deviceLabel, now);
 
   // If item was in 'planned' state, auto-transition to 'active' now that real spending began
   let updatedStatus = item.status;
@@ -342,7 +557,7 @@ export function addCost(itemId, costData, device = {}) {
     itemId,
     action: 'add_cost',
     summary: `${deviceLabel} added +${amount} ${currency}${noteStr} to "${item.title}"`,
-    details: { amount, currency, note, date },
+    details: { amount, currency, note, date, cycle },
     deviceId: deviceId,
     deviceLabel: deviceLabel
   });

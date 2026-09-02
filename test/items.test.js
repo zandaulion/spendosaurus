@@ -17,6 +17,7 @@ const {
   deleteItem,
   addCost,
   deleteCost,
+  rolloverItemCycle,
   getStats,
   getSettings,
   updateSettings
@@ -178,5 +179,57 @@ describe('Spendosaurus Items & Incremental Cost System', () => {
     const eurItems = listItems({ currency: 'EUR' });
     const plannedEurTitles = eurItems.filter((i) => i.status === 'planned').map((i) => i.title);
     assert.deepEqual(plannedEurTitles, ['Apple MacBook', 'Banana Plant', 'Greek Summer Holiday', 'Zebra Rug']);
+  });
+
+  it('supports recurrent big-ticket spending (rolling envelope)', () => {
+    // 1. Create monthly recurring item
+    const item = createItem({
+      title: 'Winter Gas & Heating',
+      category: 'utilities',
+      currency: 'RON',
+      estimated_amount: 800,
+      recurrence: 'monthly',
+      status: 'planned'
+    }, mockDevice);
+
+    assert.equal(item.recurrence, 'monthly');
+    assert.ok(item.current_cycle); // e.g. "2026-09"
+    assert.ok(item.current_cycle_label); // e.g. "Sep 2026"
+    assert.equal(item.actual_total, 0);
+
+    // 2. Tack on payments for current cycle
+    const after1 = addCost(item.id, { amount: 350, note: 'Early bill' }, mockDevice);
+    assert.equal(after1.actual_total, 350);
+    assert.equal(after1.costs.length, 1);
+
+    const after2 = addCost(item.id, { amount: 400, note: 'Mid-month bill' }, mockDevice);
+    assert.equal(after2.actual_total, 750);
+    assert.equal(after2.is_over_budget, false);
+
+    // 3. Filter by recurring
+    const recurringItems = listItems({ recurring: 'true' });
+    assert.ok(recurringItems.some((i) => i.id === item.id));
+
+    const nonRecurring = listItems({ recurring: 'false' });
+    assert.ok(!nonRecurring.some((i) => i.id === item.id));
+
+    // 4. Settle & Rollover to next cycle
+    const rolledOver = rolloverItemCycle(item.id, mockDevice);
+    assert.notEqual(rolledOver.current_cycle, item.current_cycle);
+    assert.equal(rolledOver.status, 'planned');
+    assert.equal(rolledOver.actual_total, 0); // Reset for new period
+    assert.equal(rolledOver.estimated_amount, 800); // Budget preserved
+    assert.equal(rolledOver.all_time_total, 750);
+    assert.equal(rolledOver.past_cycles.length, 1);
+    assert.equal(rolledOver.past_cycles[0].cycle, item.current_cycle);
+    assert.equal(rolledOver.past_cycles[0].total, 750);
+    assert.equal(rolledOver.past_cycles[0].is_over_budget, false);
+
+    // 5. New payment in new cycle
+    const afterNewCycle = addCost(item.id, { amount: 200, note: 'October start' }, mockDevice);
+    assert.equal(afterNewCycle.actual_total, 200);
+    assert.equal(afterNewCycle.all_time_total, 950);
+    assert.equal(afterNewCycle.past_cycles.length, 1);
+    assert.equal(afterNewCycle.past_cycles[0].total, 750);
   });
 });
