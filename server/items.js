@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db, nowIso } from './db.js';
 import { recordAudit } from './audit.js';
+import { toMinor, fromMinor, isOverBudget, percentOf, isValidCurrency, VALID_CURRENCIES } from './money.js';
 
 export const VALID_CATEGORIES = [
   'home',        // Home & Renovation, Furniture, Appliances
@@ -18,7 +19,20 @@ export const VALID_RECURRENCES = ['monthly', 'quarterly', 'yearly'];
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export function getCurrentPeriodKey(recurrence, d = new Date()) {
+export function getItemAnchorMonth(item, defaultDate = new Date()) {
+  if (item?.current_cycle && item.current_cycle.includes('-') && !item.current_cycle.includes('-Q')) {
+    const m = parseInt(item.current_cycle.split('-')[1], 10);
+    if (!isNaN(m) && m >= 1 && m <= 12) return m;
+  }
+  const dateStr = item?.target_date || item?.settled_date || item?.created_at;
+  if (dateStr) {
+    const m = parseInt(dateStr.slice(5, 7), 10);
+    if (!isNaN(m) && m >= 1 && m <= 12) return m;
+  }
+  return defaultDate.getMonth() + 1;
+}
+
+export function getCurrentPeriodKey(recurrence, d = new Date(), anchorMonth = 1) {
   if (!VALID_RECURRENCES.includes(recurrence)) return null;
   const year = d.getFullYear();
   const month = d.getMonth() + 1; // 1-12
@@ -30,13 +44,15 @@ export function getCurrentPeriodKey(recurrence, d = new Date()) {
     return `${year}-Q${q}`;
   }
   if (recurrence === 'yearly') {
-    return `${year}`;
+    const aM = (anchorMonth >= 1 && anchorMonth <= 12) ? anchorMonth : 1;
+    const cycleYear = month >= aM ? year : year - 1;
+    return `${cycleYear}-${String(aM).padStart(2, '0')}`;
   }
   return null;
 }
 
-export function getNextPeriodKey(cycleKey, recurrence) {
-  if (!cycleKey) return getCurrentPeriodKey(recurrence);
+export function getNextPeriodKey(cycleKey, recurrence, anchorMonth = 1) {
+  if (!cycleKey) return getCurrentPeriodKey(recurrence, new Date(), anchorMonth);
   if (recurrence === 'monthly') {
     const [yStr, mStr] = cycleKey.split('-');
     let y = parseInt(yStr, 10);
@@ -58,13 +74,18 @@ export function getNextPeriodKey(cycleKey, recurrence) {
     return `${y}-Q${q}`;
   }
   if (recurrence === 'yearly') {
+    if (cycleKey.includes('-')) {
+      const [yStr, mStr] = cycleKey.split('-');
+      const y = parseInt(yStr, 10) + 1;
+      return `${y}-${mStr}`;
+    }
     const y = parseInt(cycleKey, 10) + 1;
-    return `${y}`;
+    return `${y}-${String(anchorMonth).padStart(2, '0')}`;
   }
   return null;
 }
 
-export function getPeriodKeyForDate(recurrence, dateStr) {
+export function getPeriodKeyForDate(recurrence, dateStr, anchorMonth = 1) {
   if (!recurrence || !dateStr) return null;
   const parts = dateStr.slice(0, 10).split('-');
   const y = parseInt(parts[0], 10);
@@ -78,7 +99,9 @@ export function getPeriodKeyForDate(recurrence, dateStr) {
     return `${y}-Q${q}`;
   }
   if (recurrence === 'yearly') {
-    return `${y}`;
+    const aM = (anchorMonth >= 1 && anchorMonth <= 12) ? anchorMonth : 1;
+    const cycleYear = m >= aM ? y : y - 1;
+    return `${cycleYear}-${String(aM).padStart(2, '0')}`;
   }
   return null;
 }
@@ -94,14 +117,17 @@ export function formatCycleLabel(cycleKey, recurrence) {
     return `${cycleKey.replace('-', ' ')}`;
   }
   if (recurrence === 'yearly') {
+    if (cycleKey.includes('-')) {
+      const [yStr, mStr] = cycleKey.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const startMonthName = MONTH_NAMES[m - 1] || mStr;
+      const endYear = y + 1;
+      return `${startMonthName} ${y} – ${startMonthName} ${endYear}`;
+    }
     return cycleKey;
   }
   return cycleKey;
-}
-
-function formatAmount(val) {
-  const num = parseFloat(val);
-  return isNaN(num) ? 0 : Math.round(num * 100) / 100;
 }
 
 export function getSettings() {
@@ -109,7 +135,7 @@ export function getSettings() {
   const map = {};
   for (const r of rows) map[r.key] = r.value;
   return {
-    app_version: '1.4.0',
+    app_version: '1.5.0',
     default_currency: map.default_currency || 'RON',
     threshold_ron: parseFloat(map.threshold_ron || '500'),
     threshold_eur: parseFloat(map.threshold_eur || '100'),
@@ -139,16 +165,33 @@ export function updateSettings(updates, device) {
 }
 
 /**
+ * A stored cost as the API speaks it.
+ *
+ * The wire format stays decimal so the client is unchanged; the conversion
+ * happens here, once per row, and never inside a sum.
+ */
+function costForApi(cost) {
+  const { amount_minor, ...rest } = cost;
+  return { ...rest, amount: fromMinor(amount_minor) };
+}
+
+/**
  * Compute item totals, cycle scoping, and cost breakdown.
  */
 function enrichItem(item, costs = null) {
   const itemCosts = costs !== null ? costs : db.prepare(`
-    SELECT id, item_id, amount, currency, note, date, cycle, device_id, device_label, created_at
+    SELECT id, item_id, amount_minor, currency, note, date, cycle, device_id, device_label, created_at
     FROM item_costs WHERE item_id = ? ORDER BY date DESC, created_at DESC
   `).all(item.id);
 
   const recurrence = VALID_RECURRENCES.includes(item.recurrence) ? item.recurrence : null;
-  const currentCycleKey = recurrence ? (item.current_cycle || getCurrentPeriodKey(recurrence)) : null;
+  const anchorMonth = recurrence === 'yearly' ? getItemAnchorMonth(item) : 1;
+  let currentCycleKey = recurrence ? (item.current_cycle || getCurrentPeriodKey(recurrence, new Date(), anchorMonth)) : null;
+
+  // Normalize legacy yearly cycle key (e.g. "2026" -> "2026-09")
+  if (recurrence === 'yearly' && currentCycleKey && !currentCycleKey.includes('-')) {
+    currentCycleKey = `${currentCycleKey}-${String(anchorMonth).padStart(2, '0')}`;
+  }
 
   let activeCosts = itemCosts;
   const pastCyclesMap = {};
@@ -156,7 +199,11 @@ function enrichItem(item, costs = null) {
   if (recurrence && currentCycleKey) {
     activeCosts = [];
     for (const c of itemCosts) {
-      const costCycle = c.cycle || getPeriodKeyForDate(recurrence, c.date) || currentCycleKey;
+      let costCycle = c.cycle;
+      if (recurrence === 'yearly' && costCycle && !costCycle.includes('-')) {
+        costCycle = `${costCycle}-${String(anchorMonth).padStart(2, '0')}`;
+      }
+      costCycle = costCycle || getPeriodKeyForDate(recurrence, c.date, anchorMonth) || currentCycleKey;
       if (costCycle === currentCycleKey) {
         activeCosts.push(c);
       } else {
@@ -164,27 +211,29 @@ function enrichItem(item, costs = null) {
           pastCyclesMap[costCycle] = {
             cycle: costCycle,
             label: formatCycleLabel(costCycle, recurrence),
-            total: 0,
+            totalMinor: 0,
             count: 0,
             costs: []
           };
         }
-        pastCyclesMap[costCycle].total += (c.amount || 0);
+        pastCyclesMap[costCycle].totalMinor += (c.amount_minor || 0);
         pastCyclesMap[costCycle].count++;
         pastCyclesMap[costCycle].costs.push(c);
       }
     }
   }
 
-  const estimated = item.estimated_amount || 0;
-  const totalActual = activeCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
-  const allTimeActual = itemCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
-  const variance = totalActual - estimated;
-  const percentUsed = estimated > 0 ? Math.round((totalActual / estimated) * 100) : 0;
+  // Every sum below is integer addition. That is the whole point: a float
+  // total drifts, and this one decides whether the card turns red.
+  const estimatedMinor = item.estimated_minor || 0;
+  const totalMinor = activeCosts.reduce((sum, c) => sum + (c.amount_minor || 0), 0);
+  const allTimeMinor = itemCosts.reduce((sum, c) => sum + (c.amount_minor || 0), 0);
+  const varianceMinor = totalMinor - estimatedMinor;
+  const percentUsed = percentOf(totalMinor, estimatedMinor);
 
   let isRolloverDue = false;
   if (recurrence && currentCycleKey) {
-    const nowPeriod = getCurrentPeriodKey(recurrence);
+    const nowPeriod = getCurrentPeriodKey(recurrence, new Date(), anchorMonth);
     if (nowPeriod && nowPeriod > currentCycleKey) {
       isRolloverDue = true;
     }
@@ -193,10 +242,11 @@ function enrichItem(item, costs = null) {
   const pastCycles = Object.values(pastCyclesMap)
     .map((pc) => ({
       ...pc,
-      total: Math.round(pc.total * 100) / 100,
-      variance: Math.round((pc.total - estimated) * 100) / 100,
-      percent_used: estimated > 0 ? Math.round((pc.total / estimated) * 100) : 0,
-      is_over_budget: estimated > 0 && pc.total > (estimated * 1.10)
+      total: fromMinor(pc.totalMinor),
+      variance: fromMinor(pc.totalMinor - estimatedMinor),
+      percent_used: percentOf(pc.totalMinor, estimatedMinor),
+      is_over_budget: isOverBudget(pc.totalMinor, estimatedMinor),
+      costs: pc.costs.map(costForApi)
     }))
     .sort((a, b) => b.cycle.localeCompare(a.cycle));
 
@@ -205,17 +255,17 @@ function enrichItem(item, costs = null) {
     recurrence,
     current_cycle: currentCycleKey,
     current_cycle_label: recurrence ? formatCycleLabel(currentCycleKey, recurrence) : null,
-    next_cycle_label: recurrence ? formatCycleLabel(getNextPeriodKey(currentCycleKey, recurrence), recurrence) : null,
+    next_cycle_label: recurrence ? formatCycleLabel(getNextPeriodKey(currentCycleKey, recurrence, anchorMonth), recurrence) : null,
     is_rollover_due: isRolloverDue,
-    estimated_amount: estimated,
-    actual_total: Math.round(totalActual * 100) / 100,
-    all_time_total: Math.round(allTimeActual * 100) / 100,
-    variance: Math.round(variance * 100) / 100,
+    estimated_amount: fromMinor(estimatedMinor),
+    actual_total: fromMinor(totalMinor),
+    all_time_total: fromMinor(allTimeMinor),
+    variance: fromMinor(varianceMinor),
     percent_used: percentUsed,
-    is_over_budget: estimated > 0 && totalActual > (estimated * 1.10),
+    is_over_budget: isOverBudget(totalMinor, estimatedMinor),
     costs_count: activeCosts.length,
     all_time_costs_count: itemCosts.length,
-    costs: activeCosts,
+    costs: activeCosts.map(costForApi),
     past_cycles: pastCycles
   };
 }
@@ -298,24 +348,25 @@ export function createItem(data, device = {}) {
   const id = 'item_' + crypto.randomBytes(8).toString('hex');
   const now = nowIso();
   const category = VALID_CATEGORIES.includes(data.category) ? data.category : 'other';
-  const currency = ['RON', 'EUR'].includes(data.currency) ? data.currency : 'RON';
-  const estimatedAmount = formatAmount(data.estimated_amount || 0);
+  const currency = isValidCurrency(data.currency) ? data.currency : 'RON';
+  const estimatedMinor = toMinor(data.estimated_amount || 0) ?? 0;
   const status = VALID_STATUSES.includes(data.status) ? data.status : 'planned';
   const targetDate = data.target_date || null;
   const notes = data.notes || null;
   const recurrence = VALID_RECURRENCES.includes(data.recurrence) ? data.recurrence : null;
-  const currentCycle = recurrence ? (data.current_cycle || getCurrentPeriodKey(recurrence)) : null;
+  const anchorMonth = recurrence === 'yearly' ? getItemAnchorMonth({ target_date: data.target_date, created_at: now }) : 1;
+  const currentCycle = recurrence ? (data.current_cycle || getCurrentPeriodKey(recurrence, new Date(), anchorMonth)) : null;
   const deviceId = resolveDeviceId(device);
   const deviceLabel = device.label || 'Family Member';
 
   db.prepare(`
     INSERT INTO items (
-      id, title, category, currency, estimated_amount,
+      id, title, category, currency, estimated_minor,
       status, target_date, notes, recurrence, current_cycle,
       created_by_device, created_by_label, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    id, title, category, currency, estimatedAmount,
+    id, title, category, currency, estimatedMinor,
     status, targetDate, notes, recurrence, currentCycle,
     deviceId, deviceLabel, now, now
   );
@@ -323,20 +374,20 @@ export function createItem(data, device = {}) {
   // If an initial cost is provided at creation time, add it
   if (data.initial_cost && parseFloat(data.initial_cost) > 0) {
     const costId = 'cost_' + crypto.randomBytes(8).toString('hex');
-    const costAmt = formatAmount(data.initial_cost);
-    const initialCycle = recurrence ? (currentCycle || getCurrentPeriodKey(recurrence)) : null;
+    const costMinor = toMinor(data.initial_cost);
+    const initialCycle = recurrence ? (currentCycle || getCurrentPeriodKey(recurrence, new Date(), anchorMonth)) : null;
     db.prepare(`
-      INSERT INTO item_costs (id, item_id, amount, currency, note, date, cycle, device_id, device_label, created_at)
+      INSERT INTO item_costs (id, item_id, amount_minor, currency, note, date, cycle, device_id, device_label, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(costId, id, costAmt, currency, data.initial_cost_note || 'Initial payment', data.initial_cost_date || now.slice(0, 10), initialCycle, deviceId, deviceLabel, now);
+    `).run(costId, id, costMinor, currency, data.initial_cost_note || 'Initial payment', data.initial_cost_date || now.slice(0, 10), initialCycle, deviceId, deviceLabel, now);
   }
 
   const recurStr = recurrence ? ` (${recurrence})` : '';
   recordAudit({
     itemId: id,
     action: 'create_item',
-    summary: `${device.label} created "${title}"${recurStr} (Estimate: ${estimatedAmount} ${currency})`,
-    details: { title, category, currency, estimatedAmount, status, recurrence, currentCycle },
+    summary: `${device.label} created "${title}"${recurStr} (Estimate: ${fromMinor(estimatedMinor)} ${currency})`,
+    details: { title, category, currency, estimatedAmount: fromMinor(estimatedMinor), status, recurrence, currentCycle },
     deviceId: device.id,
     deviceLabel: device.label
   });
@@ -354,8 +405,26 @@ export function updateItem(id, data, device) {
 
   const title = data.title !== undefined ? data.title.trim() : existing.title;
   const category = data.category !== undefined && VALID_CATEGORIES.includes(data.category) ? data.category : existing.category;
-  const currency = data.currency !== undefined && ['RON', 'EUR'].includes(data.currency) ? data.currency : existing.currency;
-  const estimatedAmount = data.estimated_amount !== undefined ? formatAmount(data.estimated_amount) : existing.estimated_amount;
+  const currency = data.currency !== undefined && isValidCurrency(data.currency) ? data.currency : existing.currency;
+
+  // An item is denominated in one currency, so changing it would silently
+  // reinterpret every payment already recorded against it -- 1000 lei becoming
+  // 1000 euro without a single number on screen changing. Once money has been
+  // put against the item the denomination is settled.
+  if (currency !== existing.currency) {
+    const spent = db.prepare('SELECT COUNT(*) AS n FROM item_costs WHERE item_id = ?').get(id).n;
+    if (spent > 0) {
+      const err = new Error(
+        `"${existing.title}" already has ${spent} payment${spent === 1 ? '' : 's'} recorded in ${existing.currency}, so its currency cannot be changed. Create a separate item to track it in ${currency}.`
+      );
+      err.status = 409;
+      throw err;
+    }
+  }
+
+  const estimatedMinor = data.estimated_amount !== undefined
+    ? (toMinor(data.estimated_amount) ?? existing.estimated_minor)
+    : existing.estimated_minor;
   const status = data.status !== undefined && VALID_STATUSES.includes(data.status) ? data.status : existing.status;
   const targetDate = data.target_date !== undefined ? data.target_date : existing.target_date;
   const settledDate = data.settled_date !== undefined ? data.settled_date : existing.settled_date;
@@ -365,9 +434,13 @@ export function updateItem(id, data, device) {
     ? (VALID_RECURRENCES.includes(data.recurrence) ? data.recurrence : null)
     : existing.recurrence;
   
+  const anchorMonth = recurrence === 'yearly' ? getItemAnchorMonth({ target_date: targetDate, settled_date: settledDate, created_at: existing.created_at, current_cycle: existing.current_cycle }) : 1;
+
   let currentCycle = existing.current_cycle;
   if (recurrence && !currentCycle) {
-    currentCycle = getCurrentPeriodKey(recurrence);
+    currentCycle = getCurrentPeriodKey(recurrence, new Date(), anchorMonth);
+  } else if (recurrence === 'yearly' && currentCycle && !currentCycle.includes('-')) {
+    currentCycle = `${currentCycle}-${String(anchorMonth).padStart(2, '0')}`;
   } else if (!recurrence) {
     currentCycle = null;
   }
@@ -379,12 +452,12 @@ export function updateItem(id, data, device) {
 
   db.prepare(`
     UPDATE items SET
-      title = ?, category = ?, currency = ?, estimated_amount = ?,
+      title = ?, category = ?, currency = ?, estimated_minor = ?,
       status = ?, target_date = ?, settled_date = ?, notes = ?,
       recurrence = ?, current_cycle = ?, updated_at = ?
     WHERE id = ?
   `).run(
-    title, category, currency, estimatedAmount,
+    title, category, currency, estimatedMinor,
     status, targetDate, settledDate, notes,
     recurrence, currentCycle, now,
     id
@@ -395,7 +468,9 @@ export function updateItem(id, data, device) {
   if (existing.title !== title) diff.title = { old: existing.title, new: title };
   if (existing.category !== category) diff.category = { old: existing.category, new: category };
   if (existing.currency !== currency) diff.currency = { old: existing.currency, new: currency };
-  if (existing.estimated_amount !== estimatedAmount) diff.estimated_amount = { old: existing.estimated_amount, new: estimatedAmount };
+  if (existing.estimated_minor !== estimatedMinor) {
+    diff.estimated_amount = { old: fromMinor(existing.estimated_minor), new: fromMinor(estimatedMinor) };
+  }
   if (existing.status !== status) diff.status = { old: existing.status, new: status };
   if (existing.recurrence !== recurrence) diff.recurrence = { old: existing.recurrence, new: recurrence };
 
@@ -424,10 +499,14 @@ export function rolloverItemCycle(id, device = {}) {
     throw err;
   }
 
-  const prevCycle = item.current_cycle;
+  const anchorMonth = item.recurrence === 'yearly' ? getItemAnchorMonth(item) : 1;
+  let prevCycle = item.current_cycle;
+  if (item.recurrence === 'yearly' && prevCycle && !prevCycle.includes('-')) {
+    prevCycle = `${prevCycle}-${String(anchorMonth).padStart(2, '0')}`;
+  }
   const prevLabel = item.current_cycle_label || prevCycle;
   const prevActual = item.actual_total;
-  const nextCycle = getNextPeriodKey(prevCycle, item.recurrence);
+  const nextCycle = getNextPeriodKey(prevCycle, item.recurrence, anchorMonth);
   const nextLabel = formatCycleLabel(nextCycle, item.recurrence);
   const now = nowIso();
   const deviceLabel = device.label || 'Family Member';
@@ -523,9 +602,30 @@ export function addCost(itemId, costData, device = {}) {
     throw err;
   }
 
-  const amount = formatAmount(costData.amount);
-  if (amount <= 0) {
+  const amountMinor = toMinor(costData.amount);
+  if (amountMinor === null || amountMinor <= 0) {
     const err = new Error('Cost amount must be greater than 0');
+    err.status = 400;
+    throw err;
+  }
+
+  // An item is tracked in exactly one currency.
+  //
+  // Before this, a cost could carry any currency it liked and the total simply
+  // added the numbers -- so 1000 RON plus 100 EUR read as 1100 RON, understating
+  // a holiday by 400 lei and showing 22% of budget spent where the true figure
+  // was 30%. Nothing on screen said the two amounts were in different money.
+  //
+  // Refusing is better than converting. A rate stored in settings today would
+  // silently rewrite last year's totals when it was next edited, and this app's
+  // whole premise is a ledger the family can trust to stay put.
+  const requested = costData.currency;
+  if (requested !== undefined && requested !== null && requested !== item.currency) {
+    const err = new Error(
+      isValidCurrency(requested)
+        ? `"${item.title}" is tracked in ${item.currency}, so this payment must be in ${item.currency} too. Create a separate item to track ${requested} spending.`
+        : `${requested} is not a currency this app handles (${VALID_CURRENCIES.join(' or ')}).`
+    );
     err.status = 400;
     throw err;
   }
@@ -534,15 +634,16 @@ export function addCost(itemId, costData, device = {}) {
   const now = nowIso();
   const date = costData.date || now.slice(0, 10);
   const note = (costData.note || '').trim() || null;
-  const currency = costData.currency || item.currency || 'RON';
-  const cycle = item.recurrence ? (item.current_cycle || getCurrentPeriodKey(item.recurrence)) : null;
+  const currency = item.currency;
+  const anchorMonth = item.recurrence === 'yearly' ? getItemAnchorMonth(item) : 1;
+  const cycle = item.recurrence ? (item.current_cycle || getCurrentPeriodKey(item.recurrence, new Date(date), anchorMonth)) : null;
   const deviceId = resolveDeviceId(device);
   const deviceLabel = device.label || 'Family Member';
 
   db.prepare(`
-    INSERT INTO item_costs (id, item_id, amount, currency, note, date, cycle, device_id, device_label, created_at)
+    INSERT INTO item_costs (id, item_id, amount_minor, currency, note, date, cycle, device_id, device_label, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(costId, itemId, amount, currency, note, date, cycle, deviceId, deviceLabel, now);
+  `).run(costId, itemId, amountMinor, currency, note, date, cycle, deviceId, deviceLabel, now);
 
   // If item was in 'planned' state, auto-transition to 'active' now that real spending began
   let updatedStatus = item.status;
@@ -556,8 +657,8 @@ export function addCost(itemId, costData, device = {}) {
   recordAudit({
     itemId,
     action: 'add_cost',
-    summary: `${deviceLabel} added +${amount} ${currency}${noteStr} to "${item.title}"`,
-    details: { amount, currency, note, date, cycle },
+    summary: `${deviceLabel} added +${fromMinor(amountMinor)} ${currency}${noteStr} to "${item.title}"`,
+    details: { amount: fromMinor(amountMinor), currency, note, date, cycle },
     deviceId: deviceId,
     deviceLabel: deviceLabel
   });
@@ -580,8 +681,8 @@ export function deleteCost(costId, device) {
   recordAudit({
     itemId: cost.item_id,
     action: 'delete_cost',
-    summary: `${device.label} removed cost of ${cost.amount} ${cost.currency} from "${item ? item.title : 'Item'}"`,
-    details: { costId, amount: cost.amount, note: cost.note },
+    summary: `${device.label} removed cost of ${fromMinor(cost.amount_minor)} ${cost.currency} from "${item ? item.title : 'Item'}"`,
+    details: { costId, amount: fromMinor(cost.amount_minor), note: cost.note },
     deviceId: device.id,
     deviceLabel: device.label
   });

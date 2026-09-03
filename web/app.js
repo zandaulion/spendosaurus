@@ -39,8 +39,8 @@ const state = {
 };
 
 // App Build Info
-export const CLIENT_BUILD = '20260902.1';
-export const APP_VERSION = 'v1.4.0 (Build 2026.09.02)';
+export const CLIENT_BUILD = '20260902.2';
+export const APP_VERSION = 'v1.5.0 (Build 2026.09.02)';
 
 // ---------------------------------------------------------------- Cache Buster & Updater
 

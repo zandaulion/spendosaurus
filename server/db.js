@@ -54,7 +54,7 @@ export function initDb() {
       title             TEXT NOT NULL,
       category          TEXT NOT NULL DEFAULT 'other',
       currency          TEXT NOT NULL DEFAULT 'RON',
-      estimated_amount  REAL DEFAULT 0,
+      estimated_minor   INTEGER NOT NULL DEFAULT 0,
       status            TEXT NOT NULL DEFAULT 'planned',
       target_date       TEXT,
       settled_date      TEXT,
@@ -73,7 +73,7 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS item_costs (
       id            TEXT PRIMARY KEY,
       item_id       TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-      amount        REAL NOT NULL,
+      amount_minor  INTEGER NOT NULL,
       currency      TEXT NOT NULL DEFAULT 'RON',
       note          TEXT,
       date          TEXT NOT NULL,
@@ -105,6 +105,20 @@ export function initDb() {
   try { db.exec("ALTER TABLE items ADD COLUMN current_cycle TEXT DEFAULT NULL;"); } catch {}
   try { db.exec("ALTER TABLE item_costs ADD COLUMN cycle TEXT DEFAULT NULL;"); } catch {}
 
+  migrateMoneyToMinorUnits();
+
+  // Safe data migration for yearly items to 12-month anniversary format (e.g. "2026" -> "2026-09")
+  try {
+    const yearlyItems = db.prepare("SELECT id, current_cycle, created_at, target_date FROM items WHERE recurrence = 'yearly' AND current_cycle IS NOT NULL").all();
+    for (const yIt of yearlyItems) {
+      if (yIt.current_cycle && !yIt.current_cycle.includes('-')) {
+        const dStr = yIt.target_date || yIt.created_at || '2026-09';
+        const m = dStr.slice(5, 7) || '01';
+        db.prepare("UPDATE items SET current_cycle = ? WHERE id = ?").run(`${yIt.current_cycle}-${m}`, yIt.id);
+      }
+    }
+  } catch {}
+
   // Initialize default settings if not set
   const getSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
   const setSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -112,6 +126,40 @@ export function initDb() {
   setSetting.run('threshold_ron', '500');
   setSetting.run('threshold_eur', '100');
   setSetting.run('exchange_rate_eur_ron', '5.0');
+}
+
+/**
+ * Moves money off floating point and onto whole minor units.
+ *
+ * Runs once. The old REAL columns are dropped rather than left alongside,
+ * because two columns holding the same amount is how they come to disagree.
+ *
+ * The conversion is a rounding, and rounding is only lossless if the stored
+ * values were already exact to the cent. They were checked before this was
+ * written and every one was, which is the only reason this can be a straight
+ * migration rather than a reconciliation.
+ */
+function migrateMoneyToMinorUnits() {
+  const columns = (table) =>
+    db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+
+  const itemCols = columns('items');
+  if (itemCols.includes('estimated_amount')) {
+    if (!itemCols.includes('estimated_minor')) {
+      db.exec('ALTER TABLE items ADD COLUMN estimated_minor INTEGER NOT NULL DEFAULT 0;');
+    }
+    db.exec('UPDATE items SET estimated_minor = CAST(ROUND(COALESCE(estimated_amount, 0) * 100) AS INTEGER);');
+    db.exec('ALTER TABLE items DROP COLUMN estimated_amount;');
+  }
+
+  const costCols = columns('item_costs');
+  if (costCols.includes('amount')) {
+    if (!costCols.includes('amount_minor')) {
+      db.exec('ALTER TABLE item_costs ADD COLUMN amount_minor INTEGER NOT NULL DEFAULT 0;');
+    }
+    db.exec('UPDATE item_costs SET amount_minor = CAST(ROUND(COALESCE(amount, 0) * 100) AS INTEGER);');
+    db.exec('ALTER TABLE item_costs DROP COLUMN amount;');
+  }
 }
 
 initDb();

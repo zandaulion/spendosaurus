@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spendosaurus-v16';
+const CACHE_NAME = 'spendosaurus-v17';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
