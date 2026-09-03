@@ -15,7 +15,7 @@ A lightweight, mobile-first Progressive Web App (PWA) designed for families to t
   * Triple-tap / long-press dinosaur mascot: Instant zero-friction cache wipe and update reload.
 * **Mobile-First PWA & Edge Back Navigation**: Integrated with browser History API so Android/iOS edge back gestures unwind modal screens seamlessly.
 * **Dual Currency Support**: Switch effortlessly between `RON` (Romanian Leu) and `EUR` (Euro) with customizable big-ticket thresholds.
-* **Invite-Based Authentication**: Seamless pairing via the `pwa-invite-console` framework (`X-Admin` authorization + token-based device management).
+* **Invite-Based Authentication**: Seamless pairing via the `pwa-invite-console` framework. Admin endpoints require a shared secret in `X-Admin-Token`, supplied from `ADMIN_TOKEN` and injected by the tailnet-only listener; without it they answer 404.
 * **Comprehensive Audit Trail**: Every item creation, status transition, cost tack-on, and deletion is recorded with timestamp and actor attribution.
 
 ---
