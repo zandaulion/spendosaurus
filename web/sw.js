@@ -1,25 +1,22 @@
-const CACHE_NAME = 'spendosaurus-v17';
+// Stamped at boot from the contents of web/, by server/serve-sw.js. A
+// version nobody has to remember to bump cannot be forgotten.
+const CACHE_NAME = 'spendosaurus-__BUILD_VERSION__';
+
+importScripts('/sw-update.js');
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => {
-      // Wipe ALL old caches unconditionally
-      return Promise.all(keys.map((k) => caches.delete(k)));
-    }).then(() => self.clients.claim()).then(() => {
-      // Force reload all open windows
-      return self.clients.matchAll({ type: 'window' }).then((clients) => {
-        for (const client of clients) {
-          if (client.navigate) {
-            client.navigate('/?updated=' + Date.now());
-          }
-        }
-      });
-    })
-  );
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // Announce rather than navigate: forcing a reload discards whatever the
+    // person had on screen and not yet saved.
+    await announceUpdate();
+  })());
 });
 
 self.addEventListener('fetch', (e) => {
