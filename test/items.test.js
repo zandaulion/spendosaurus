@@ -18,6 +18,7 @@ const {
   addCost,
   deleteCost,
   rolloverItemCycle,
+  getCurrentPeriodKey,
   getStats,
   getSettings,
   updateSettings
@@ -231,5 +232,55 @@ describe('Spendosaurus Items & Incremental Cost System', () => {
     assert.equal(afterNewCycle.all_time_total, 950);
     assert.equal(afterNewCycle.past_cycles.length, 1);
     assert.equal(afterNewCycle.past_cycles[0].total, 750);
+  });
+
+  it('supports 12-month anniversary recurrence for yearly costs (e.g. insurance)', () => {
+    // 1. Create a yearly recurring expense created in September
+    const item = createItem({
+      title: 'Home Insurance',
+      category: 'home',
+      currency: 'RON',
+      estimated_amount: 1200,
+      recurrence: 'yearly',
+      target_date: '2026-09-15',
+      status: 'planned'
+    }, mockDevice);
+
+    assert.equal(item.recurrence, 'yearly');
+    assert.equal(item.current_cycle, '2026-09');
+    assert.equal(item.current_cycle_label, 'Sep 2026 – Sep 2027');
+    assert.equal(item.next_cycle_label, 'Sep 2027 – Sep 2028');
+    assert.equal(item.is_rollover_due, false);
+
+    // 2. Add payment within the anniversary cycle
+    const afterCost = addCost(item.id, {
+      amount: 1200,
+      note: 'Annual premium',
+      date: '2026-09-16'
+    }, mockDevice);
+
+    assert.equal(afterCost.actual_total, 1200);
+    assert.equal(afterCost.percent_used, 100);
+    assert.equal(afterCost.costs.length, 1);
+
+    // 3. Rollover advances to next 12-month window
+    const rolledOver = rolloverItemCycle(item.id, mockDevice);
+    assert.equal(rolledOver.current_cycle, '2027-09');
+    assert.equal(rolledOver.current_cycle_label, 'Sep 2027 – Sep 2028');
+    assert.equal(rolledOver.next_cycle_label, 'Sep 2028 – Sep 2029');
+    assert.equal(rolledOver.actual_total, 0);
+    assert.equal(rolledOver.all_time_total, 1200);
+    assert.equal(rolledOver.past_cycles.length, 1);
+    assert.equal(rolledOver.past_cycles[0].cycle, '2026-09');
+    assert.equal(rolledOver.past_cycles[0].label, 'Sep 2026 – Sep 2027');
+    assert.equal(rolledOver.past_cycles[0].total, 1200);
+
+    // 4. Verify calendar dates map to correct 12-month envelope
+    // Jan 2027 (4 months later) is STILL in 2026-09 cycle
+    assert.equal(getCurrentPeriodKey('yearly', new Date('2027-01-15'), 9), '2026-09');
+    // Aug 2027 (11 months later) is STILL in 2026-09 cycle
+    assert.equal(getCurrentPeriodKey('yearly', new Date('2027-08-31'), 9), '2026-09');
+    // Sep 2027 (12 months later) rolls over to 2027-09
+    assert.equal(getCurrentPeriodKey('yearly', new Date('2027-09-01'), 9), '2027-09');
   });
 });
