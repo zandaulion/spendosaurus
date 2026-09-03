@@ -308,6 +308,17 @@ app.post('/api/settings', requireDevice, (req, res) => {
 // ---------------------------------------------------------------- Static Web Serving
 
 const webDir = path.join(__dirname, '../web');
+// Before express.static, or the unstamped worker wins.
+app.get('/bust', (req, res) => {
+  // The escape hatch for a client wedged on an old worker. Ahead of
+  // express.static so the file cannot be served without these headers, and
+  // sw.js refuses to intercept the path.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Clear-Site-Data', '"cache"');
+  res.sendFile(path.join(webDir, 'bust.html'));
+});
+
+app.use(swVersion(webDir));
 app.use(express.static(webDir, {
   setHeaders: (res, filePath) => {
     // Revalidate HTML and JS for crisp PWA updates

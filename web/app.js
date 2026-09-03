@@ -1,3 +1,4 @@
+import { installUpdates } from '/pwa-update.js';
 import { renderSpendoSVG } from './mascot.js';
 import { bindCardSwipe, bindSheetDismiss } from './gestures.js';
 
@@ -1032,4 +1033,11 @@ async function handleRolloverCycle(id) {
       checkServerUpdate();
     }
   });
+});
+
+
+installUpdates({
+  appName: 'Spendosaurus',
+  // A half-filled sheet is unsaved work; reloading through it would lose it.
+  isBusy: () => Boolean(document.querySelector('.sheet:not([hidden])'))
 });
