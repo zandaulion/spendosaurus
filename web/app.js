@@ -674,7 +674,9 @@ function openSheet(id) {
     close: () => {
       el.classList.remove('open');
       const panel = el.querySelector('.sheet-panel');
-      if (panel) panel.style.transform = '';
+      // Both, not just the transform: a drag sets transition: none inline, and
+      // leaving it would make the next open jump rather than slide.
+      if (panel) { panel.style.transform = ''; panel.style.transition = ''; }
     }
   });
 
