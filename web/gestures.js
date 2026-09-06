@@ -99,9 +99,18 @@ export function bindCardSwipe(cardEl, { onSwipeRight, onSwipeLeft }) {
   surface.addEventListener('touchcancel', onTouchEnd, { passive: true });
 }
 
+/**
+ * Drag the sheet down to close it.
+ *
+ * The whole panel is the target, not the grab bar: that bar is 36x4 CSS
+ * pixels, so the gesture existed but essentially could not be hit. Starting
+ * anywhere on the sheet works now, subject to two conditions -- the panel must
+ * be scrolled to the top, or a downward drag is a scroll; and the touch must
+ * not begin on something that handles its own drag, or selecting text in a
+ * field would throw the sheet away with the half-typed form in it.
+ */
 export function bindSheetDismiss(sheetOverlayEl, onDismiss) {
   const panel = sheetOverlayEl.querySelector('.sheet-panel');
-  const handle = sheetOverlayEl.querySelector('.sheet-handle');
   if (!panel) return;
 
   let startY = 0;
@@ -109,9 +118,13 @@ export function bindSheetDismiss(sheetOverlayEl, onDismiss) {
   let isDragging = false;
   const DISMISS_THRESHOLD = 90;
 
-  const targetEl = handle || panel;
+  /** Controls that own the gesture themselves. */
+  const OWNS_ITS_DRAG = 'input, textarea, select, button, a, [contenteditable], .sheet-actions';
+
+  const targetEl = panel;
 
   targetEl.addEventListener('touchstart', (e) => {
+    if (e.target.closest(OWNS_ITS_DRAG)) return;
     if (panel.scrollTop <= 0) {
       startY = e.touches[0].clientY;
       currentY = 0;
@@ -138,6 +151,8 @@ export function bindSheetDismiss(sheetOverlayEl, onDismiss) {
     panel.style.transition = 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)';
     if (currentY > DISMISS_THRESHOLD) {
       if (navigator.vibrate) navigator.vibrate(20);
+      // The inline styles are cleared by the close handler, so the next open
+      // animates from the stylesheet rather than from where this drag ended.
       onDismiss();
     } else {
       panel.style.transform = 'translateY(0)';
