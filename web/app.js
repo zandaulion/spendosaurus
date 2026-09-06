@@ -633,6 +633,34 @@ function openSettingsSheet() {
 
 const screenStack = [];
 
+/**
+ * How much of the window the on-screen keyboard is covering, as --kb.
+ *
+ * Android and desktop Chrome shrink the layout viewport themselves once the
+ * viewport meta asks for interactive-widget=resizes-content, so this measures
+ * zero there and nothing is compensated twice. iOS does not: the layout
+ * viewport keeps its full height and only visualViewport shrinks, which is the
+ * case that used to leave the sheet's buttons behind the keyboard.
+ *
+ * offsetTop is subtracted because iOS scrolls the visual viewport up to keep
+ * the focused field visible; without it the sheet jumps by that amount.
+ */
+function trackKeyboardInset() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+
+  const apply = () => {
+    const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    // Small movements are the browser's own chrome sliding, not the keyboard.
+    const kb = covered > 60 ? Math.round(covered) : 0;
+    document.documentElement.style.setProperty('--kb', kb + 'px');
+  };
+
+  vv.addEventListener('resize', apply);
+  vv.addEventListener('scroll', apply);
+  apply();
+}
+
 function openSheet(id) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -687,6 +715,7 @@ function escapeHtml(str) {
 // ---------------------------------------------------------------- DOM Event Listeners
 
 document.addEventListener('DOMContentLoaded', () => {
+  trackKeyboardInset();
   initApp();
 
   // Close buttons on sheets
