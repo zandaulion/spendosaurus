@@ -34,6 +34,11 @@ import {
 } from './items.js';
 
 import { listAuditLogs } from './audit.js';
+// swVersion() was being called at line ~321 without ever being imported. The
+// running container predated that line, so it only surfaced on the next
+// rebuild -- which is why a rebuild has to happen before believing the server
+// works, not after.
+import { swVersion, shellVersion } from './serve-sw.js';
 
 dotenv.config();
 
@@ -319,6 +324,8 @@ app.get('/bust', (req, res) => {
 });
 
 app.use(swVersion(webDir));
+const shell = shellVersion(webDir);
+app.use(shell);
 app.use(express.static(webDir, {
   setHeaders: (res, filePath) => {
     // Revalidate HTML and JS for crisp PWA updates
@@ -333,7 +340,7 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Endpoint not found' });
   }
-  res.sendFile(path.join(webDir, 'index.html'));
+  shell.send(res);
 });
 
 // Only listen if not imported in tests

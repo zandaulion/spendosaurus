@@ -704,7 +704,10 @@ button {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  /* --kb is what the on-screen keyboard covers, measured in app.js. Zero on a
+     desktop and on Android, where interactive-widget=resizes-content shrinks
+     the layout viewport for us; on iOS it is the keyboard's height. */
+  bottom: var(--kb, 0px);
   background: rgba(0,0,0,0.55);
   backdrop-filter: blur(2px);
   z-index: 80;
@@ -728,7 +731,9 @@ button {
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 20px 20px calc(20px + var(--safe-bottom));
   box-shadow: var(--shadow-lg);
-  max-height: 88dvh;
+  /* Less the keyboard, or the panel keeps its full height, is pushed up by
+     the overlay, and loses its top off the screen instead. */
+  max-height: calc(88dvh - var(--kb, 0px));
   overflow-y: auto;
   transform: translateY(100%);
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
@@ -736,6 +741,39 @@ button {
 
 .sheet-overlay.open .sheet-panel {
   transform: translateY(0);
+}
+
+/*
+ * The buttons stay put while the form scrolls under them.
+ *
+ * They used to sit at the end of the form, so on a long sheet you had to
+ * scroll to find them -- and with the keyboard open they were behind it. Stuck
+ * to the foot of the panel they are always the same distance from your thumb.
+ *
+ * Negative margins bleed the bar out to the panel's edges, so the divider and
+ * the background run the full width rather than floating in the padding.
+ */
+.sheet-actions {
+  position: sticky;
+  bottom: calc(-20px - var(--safe-bottom));
+  z-index: 2;
+  display: flex;
+  gap: 10px;
+  margin: 18px -20px calc(-20px - var(--safe-bottom));
+  padding: 12px 20px calc(12px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* Side by side and equal, whatever each one says. The width: 100% and the
+   stacking margins on the buttons themselves are what used to put these on
+   separate lines. */
+.sheet-actions .btn-primary,
+.sheet-actions .btn-secondary {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
 }
 
 .sheet-handle {

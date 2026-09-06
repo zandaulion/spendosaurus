@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Spendosaurus — Family Big-Ticket Spending</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#2E7D32" media="(prefers-color-scheme: light)">
@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/app.css?v=21">
+  <link rel="stylesheet" href="/app.css?v=__BUILD_VERSION__">
 </head>
 <body>
 
@@ -198,7 +198,9 @@
           <textarea id="add-notes" class="input-field" rows="2" placeholder="Model, store, warranty details, links..." autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
         </div>
 
-        <button type="submit" class="btn-primary">Save Expense</button>
+        <div class="sheet-actions">
+          <button type="submit" class="btn-primary">Save Expense</button>
+        </div>
       </form>
     </div>
   </div>
@@ -256,7 +258,9 @@
           </div>
         </div>
 
-        <button type="submit" class="btn-primary">🦖 Tack On Cost</button>
+        <div class="sheet-actions">
+          <button type="submit" class="btn-primary">🦖 Tack On Cost</button>
+        </div>
       </form>
     </div>
   </div>
@@ -353,8 +357,10 @@
           <div id="edit-costs-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
         </div>
 
-        <button type="submit" class="btn-primary">Update Item</button>
-        <button type="button" id="btn-delete-item" class="btn-secondary btn-danger">Delete Item</button>
+        <div class="sheet-actions">
+          <button type="submit" class="btn-primary">Update Item</button>
+          <button type="button" id="btn-delete-item" class="btn-secondary btn-danger">Delete Item</button>
+        </div>
       </form>
     </div>
   </div>
@@ -421,6 +427,6 @@
   </div>
 
   <!-- Application JS Modules -->
-  <script type="module" src="/app.js?v=21"></script>
+  <script type="module" src="/app.js?v=__BUILD_VERSION__"></script>
 </body>
 </html>
