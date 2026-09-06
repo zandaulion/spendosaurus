@@ -36,7 +36,18 @@ const state = {
   currentStatus: 'all',
   thresholdOnly: false,
   recurringOnly: false,
-  activeItem: null
+  activeItem: null,
+  /**
+   * Items whose status changed since the list last settled.
+   *
+   * A status change used to re-sort immediately, so the card you swiped left
+   * the place you were looking at and landed somewhere alphabetical -- often
+   * off-screen, and often with every card between the two positions animating
+   * at the same time. Nothing moves now until the list is settled explicitly,
+   * on the next load or with the tidy-up bar. These are the ones sitting in
+   * the wrong group in the meantime, and they say so on the card.
+   */
+  moved: new Map()
 };
 
 // App Build Info
@@ -209,20 +220,74 @@ async function loadSettings() {
   }
 }
 
-async function loadData() {
+/**
+ * Re-fetch, and decide whether the list is allowed to re-sort.
+ *
+ * `settle: false` keeps whatever order is on screen and only refreshes the
+ * values inside the cards, so a background reload cannot rearrange the list
+ * under someone's thumb. Genuinely new items still appear, at the end.
+ */
+let toastTimer = null;
+
+/** A short message, optionally with one action. */
+function toast(message, action = null) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  clearTimeout(toastTimer);
+
+  el.innerHTML = '';
+  const text = document.createElement('span');
+  text.textContent = message;
+  el.appendChild(text);
+
+  if (action) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      clearTimeout(toastTimer);
+      el.hidden = true;
+      action.action();
+    }, { once: true });
+    el.appendChild(btn);
+  }
+
+  el.hidden = false;
+  // Longer with an action: an undo nobody has time to reach is not an undo.
+  toastTimer = setTimeout(() => { el.hidden = true; }, action ? 6000 : 2600);
+}
+
+async function loadData({ settle = true } = {}) {
   try {
     const [itemsRes, statsRes] = await Promise.all([
       api('/api/items?status=all'),
       api('/api/stats')
     ]);
 
-    state.items = itemsRes.items;
+    state.items = settle ? itemsRes.items : keepCurrentOrder(itemsRes.items);
+    if (settle) state.moved.clear();
     state.stats = statsRes;
     renderOverview();
     renderFeed();
   } catch (err) {
     console.error('Data load error:', err);
   }
+}
+
+/** The server's values, in the order already on screen. */
+function keepCurrentOrder(incoming) {
+  const position = new Map(state.items.map((item, i) => [item.id, i]));
+  return [...incoming].sort((a, b) => {
+    const pa = position.has(a.id) ? position.get(a.id) : Number.MAX_SAFE_INTEGER;
+    const pb = position.has(b.id) ? position.get(b.id) : Number.MAX_SAFE_INTEGER;
+    return pa - pb;
+  });
+}
+
+/** Adopt the server's order and clear the markers. */
+async function settleOrder() {
+  await loadData({ settle: true });
 }
 
 // ---------------------------------------------------------------- Render Overview & Feed
@@ -283,8 +348,12 @@ function renderFeed(animate = true) {
     // Recurring filter
     if (state.recurringOnly && !item.recurrence) return false;
 
-    // Status filter
-    if (state.currentStatus !== 'all' && item.status !== state.currentStatus) return false;
+    // Status filter. A card whose status changed a moment ago stays visible
+    // even though it no longer matches -- watching it vanish is the thing this
+    // is trying to avoid. It is marked as leaving, and goes on the next settle.
+    if (state.currentStatus !== 'all'
+        && item.status !== state.currentStatus
+        && !state.moved.has(item.id)) return false;
 
     // Threshold filter
     if (state.thresholdOnly) {
@@ -307,7 +376,38 @@ function renderFeed(animate = true) {
 
   const renderedCards = [];
 
+  // The tidy-up bar. Deferring the re-sort is only comfortable if it is
+  // visible and under the reader's control, rather than something that will
+  // happen at some unannounced later moment.
+  if (state.moved.size > 0) {
+    const bar = document.createElement('button');
+    bar.type = 'button';
+    bar.className = 'settle-bar';
+    bar.innerHTML =
+      `<span>${state.moved.size} ${state.moved.size === 1 ? 'item has' : 'items have'} changed status</span>`
+      + `<span class="settle-do">Tidy up ⤵</span>`;
+    bar.addEventListener('click', () => settleOrder());
+    feed.appendChild(bar);
+  }
+
+  // Headers describe the group a card is *sitting* in, which is not always its
+  // status any more -- that is exactly what the badge on a moved card says.
+  let lastGroup = null;
+
   filtered.forEach((item) => {
+    const group = state.moved.has(item.id) ? state.moved.get(item.id) : item.status;
+    if (group !== lastGroup) {
+      lastGroup = group;
+      const meta = STATUS_META[group] || STATUS_META.planned;
+      const count = filtered.filter((other) => (
+        (state.moved.has(other.id) ? state.moved.get(other.id) : other.status) === group
+      )).length;
+      const head = document.createElement('div');
+      head.className = 'feed-group-head';
+      head.innerHTML = `<span>${meta.icon} ${meta.label}</span><span class="feed-group-count">${count}</span>`;
+      feed.appendChild(head);
+    }
+
     const cardWrapper = document.createElement('div');
     cardWrapper.className = 'item-card-wrapper';
     cardWrapper.dataset.id = item.id;
@@ -339,7 +439,14 @@ function renderFeed(animate = true) {
       `
       : '';
 
+    // Says what changed and where it is going, on the card itself, so the
+    // information travels with the thing it is about.
+    const movedNote = state.moved.has(item.id)
+      ? `<div class="moved-note no-swipe">${st.icon} Now ${escapeHtml(st.label)} &middot; moves when you tidy up</div>`
+      : '';
+
     cardWrapper.innerHTML = `
+      ${movedNote}
       <div class="swipe-action-bg swipe-action-right">
         <span>⚡</span> <span>${nextStatusLabel}</span>
       </div>
@@ -429,12 +536,10 @@ function renderFeed(animate = true) {
             // Card changed position!
             const movedUp = deltaY > 0;
 
-            // Show directional tag
-            const tag = document.createElement('div');
-            tag.className = `move-direction-tag ${movedUp ? 'up' : 'down'}`;
-            tag.innerHTML = movedUp ? `<span>⬆️</span> <span>Moved Up</span>` : `<span>⬇️</span> <span>Moved Down</span>`;
-            wrapper.querySelector('.card-surface').appendChild(tag);
-            setTimeout(() => tag.remove(), 2500);
+            // No per-card "Moved Up/Down" badge any more. One swipe displaces
+            // every card between the old and new position, so the badges
+            // appeared on all of them at once and the card actually acted on
+            // was indistinguishable from the collateral.
 
             // Invert
             wrapper.style.transform = `translateY(${deltaY}px)`;
@@ -460,15 +565,33 @@ function renderFeed(animate = true) {
 
 // ---------------------------------------------------------------- Item Actions
 
-async function advanceItemStatus(id, newStatus) {
+async function advanceItemStatus(id, newStatus, { isUndo = false } = {}) {
+  const item = state.items.find((i) => i.id === id);
+  const from = item ? item.status : null;
+
   try {
     await api(`/api/items/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status: newStatus })
     });
-    await loadData();
+
+    // Deliberately settle: false. The card keeps its place; only its contents
+    // change. It is marked as moved so the card can say where it now belongs.
+    if (isUndo) state.moved.delete(id);
+    else if (from) state.moved.set(id, from);
+    await loadData({ settle: false });
+
+    if (!isUndo) {
+      const to = STATUS_META[newStatus] || STATUS_META.planned;
+      toast(`${to.icon} ${to.label}`, {
+        label: 'Undo',
+        // Undo puts the status back and clears the marker, so nothing is left
+        // waiting to move on the next settle.
+        action: () => advanceItemStatus(id, from, { isUndo: true })
+      });
+    }
   } catch (err) {
-    alert(err.message);
+    toast(err.message);
   }
 }
 
@@ -766,7 +889,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.filter-bar .filter-chip:not(#threshold-filter-btn):not(#recurring-filter-btn)').forEach((c) => c.classList.remove('active'));
     chip.classList.add('active');
     state.currentStatus = chip.dataset.status;
-    renderFeed();
+    // Re-scoping the list is a natural moment to let it settle: you are
+    // already changing what you are looking at.
+    if (state.moved.size > 0) settleOrder(); else renderFeed();
   });
 
   // Navigation Bar Buttons
@@ -1062,6 +1187,9 @@ async function handleRolloverCycle(id) {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       checkServerUpdate();
+      // Coming back to the app is the other natural settle: whatever was
+      // pending has had its moment on screen and can take its proper place.
+      if (state.moved.size > 0) settleOrder();
     }
   });
 });
