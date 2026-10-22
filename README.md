@@ -34,7 +34,7 @@ Use Node.js 24 or newer, npm and `openssl`. The PWA needs a server; an offline
 shell is not an offline queue for spending entries. Run in a fresh checkout:
 
 ```bash
-npm install
+npm ci
 npm test
 umask 077
 printf 'ADMIN_TOKEN=%s\nPUBLIC_BASE_URL=http://127.0.0.1:3090\nPORT=3090\nDATA_DIR=./data\n' \
